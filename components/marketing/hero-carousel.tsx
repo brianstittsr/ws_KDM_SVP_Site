@@ -76,6 +76,18 @@ const defaultSlides: HeroSlide[] = [
     isPublished: true,
     order: 4,
   },
+  {
+    id: "5",
+    badge: "NEW — AntiFragile Supply Chain Analysis",
+    headline: "Build Resilient",
+    highlightedText: "Supply Chains",
+    subheadline: "Go beyond risk mitigation. Our AntiFragile methodology helps your supply chain actually grow stronger from disruptions, volatility, and uncertainty.",
+    benefits: ["Stress Testing", "Redundancy Mapping", "Adaptive Strategies"],
+    primaryCta: { text: "Schedule Discovery Call", href: "/antifragile" },
+    secondaryCta: { text: "Learn More", href: "/antifragile" },
+    isPublished: true,
+    order: 5,
+  },
 ];
 
 interface HeroCarouselProps {
@@ -152,17 +164,11 @@ export function HeroCarousel({ slides = defaultSlides, autoPlayInterval = 6000 }
             </div>
 
             {/* CTAs */}
-            <div className="mt-10 flex flex-col sm:flex-row justify-center gap-4">
+            <div className="mt-10 flex justify-center">
               <Button size="lg" className="text-lg px-8" asChild>
                 <Link href={currentSlide.primaryCta.href}>
                   {currentSlide.primaryCta.text}
                   <ArrowRight className="ml-2 h-5 w-5" />
-                </Link>
-              </Button>
-              <Button size="lg" variant="outline" className="text-lg px-8 border-white/20 hover:bg-white/10" asChild>
-                <Link href={currentSlide.secondaryCta.href}>
-                  <Play className="mr-2 h-5 w-5" />
-                  {currentSlide.secondaryCta.text}
                 </Link>
               </Button>
             </div>
@@ -210,13 +216,28 @@ export function HeroCarousel({ slides = defaultSlides, autoPlayInterval = 6000 }
 
           {/* Trust Indicators */}
           <div className="mt-16 pt-8 border-t border-white/10">
-            <p className="text-sm text-gray-400 mb-6">Trusted by manufacturers across the United States</p>
-            <div className="flex flex-wrap justify-center items-center gap-8 opacity-60">
-              <div className="h-8 w-24 bg-white/20 rounded" />
-              <div className="h-8 w-28 bg-white/20 rounded" />
-              <div className="h-8 w-20 bg-white/20 rounded" />
-              <div className="h-8 w-32 bg-white/20 rounded" />
-              <div className="h-8 w-24 bg-white/20 rounded" />
+            <p className="text-sm text-gray-400 mb-6">Certifications & Partnerships</p>
+            <div className="flex flex-wrap justify-center items-center gap-6 md:gap-10">
+              <div className="flex flex-col items-center text-center">
+                <span className="text-lg font-bold text-white">ISO 9001</span>
+                <span className="text-xs text-gray-400">Certified</span>
+              </div>
+              <div className="flex flex-col items-center text-center">
+                <span className="text-lg font-bold text-white">IATF 16949</span>
+                <span className="text-xs text-gray-400">Automotive</span>
+              </div>
+              <div className="flex flex-col items-center text-center">
+                <span className="text-lg font-bold text-white">MEP</span>
+                <span className="text-xs text-gray-400">Network Partner</span>
+              </div>
+              <div className="flex flex-col items-center text-center">
+                <span className="text-lg font-bold text-white">Reshoring</span>
+                <span className="text-xs text-gray-400">Initiative</span>
+              </div>
+              <div className="flex flex-col items-center text-center">
+                <span className="text-lg font-bold text-white">NIST</span>
+                <span className="text-xs text-gray-400">Aligned</span>
+              </div>
             </div>
           </div>
         </div>

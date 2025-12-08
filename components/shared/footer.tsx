@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Factory, Linkedin, Twitter, Youtube, Mail, Phone, MapPin } from "lucide-react";
+import Image from "next/image";
+import { Linkedin, Twitter, Youtube, Mail, Phone, MapPin } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 
 const footerLinks = {
@@ -43,7 +44,13 @@ export function Footer() {
           {/* Brand Column */}
           <div className="col-span-2 md:col-span-4 lg:col-span-1 space-y-4">
             <Link href="/" className="flex items-center gap-2">
-              <Factory className="h-8 w-8 text-primary" />
+              <Image
+                src="/VPlus_logo.webp"
+                alt="Strategic Value+ Logo"
+                width={40}
+                height={40}
+                className="h-10 w-auto"
+              />
               <div className="flex flex-col">
                 <span className="text-lg font-bold leading-none">Strategic Value+</span>
                 <span className="text-xs text-gray-400">Transforming U.S. Manufacturing</span>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -87,7 +88,14 @@ export function Navbar() {
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 flex h-16 items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
-          <Factory className="h-8 w-8 text-primary" />
+          <Image
+            src="/VPlus_logo.webp"
+            alt="Strategic Value+ Logo"
+            width={48}
+            height={48}
+            className="h-12 w-auto"
+            priority
+          />
           <div className="flex flex-col">
             <span className="text-lg font-bold leading-none">Strategic Value+</span>
             <span className="text-xs text-muted-foreground">Transforming U.S. Manufacturing</span>

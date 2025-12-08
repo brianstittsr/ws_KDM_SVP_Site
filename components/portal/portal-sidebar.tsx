@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import NextImage from "next/image";
 import { usePathname } from "next/navigation";
 import {
   Sidebar,
@@ -43,7 +44,7 @@ import {
   Handshake,
   DollarSign,
   User,
-  Image,
+  ImageIcon,
   Shield,
   Rocket,
   Battery,
@@ -112,7 +113,7 @@ const adminItems = [
   {
     title: "Hero Management",
     href: "/portal/admin/hero",
-    icon: Image,
+    icon: ImageIcon,
   },
   {
     title: "Contact Popup",
@@ -149,7 +150,13 @@ export function PortalSidebar() {
     <Sidebar>
       <SidebarHeader className="border-b border-sidebar-border">
         <Link href="/portal" className="flex items-center gap-2 px-2 py-4">
-          <Factory className="h-8 w-8 text-primary" />
+          <NextImage
+            src="/VPlus_logo.webp"
+            alt="Strategic Value+ Logo"
+            width={40}
+            height={40}
+            className="h-10 w-auto"
+          />
           <div className="flex flex-col">
             <span className="text-lg font-bold leading-none">Strategic Value+</span>
             <span className="text-xs text-sidebar-foreground/60">Business Portal</span>
