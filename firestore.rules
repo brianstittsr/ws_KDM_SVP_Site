@@ -254,5 +254,25 @@ service cloud.firestore {
       );
       allow delete: if isAdmin();
     }
+
+    // =========================================================================
+    // Strategic Partners
+    // =========================================================================
+
+    // Strategic Partners - read by all authenticated, write by admins/team
+    match /strategicPartners/{partnerId} {
+      allow read: if isAuthenticated();
+      allow create: if isTeamMember();
+      allow update: if isTeamMember();
+      allow delete: if isAdmin();
+    }
+
+    // Team Members - read by all authenticated, write by admins/team
+    match /teamMembers/{memberId} {
+      allow read: if isAuthenticated();
+      allow create: if isTeamMember();
+      allow update: if isTeamMember();
+      allow delete: if isAdmin();
+    }
   }
 }

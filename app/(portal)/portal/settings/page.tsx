@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -15,6 +16,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   Eye,
   EyeOff,
@@ -31,8 +41,11 @@ import {
   Webhook,
   Key,
   RefreshCw,
+  Send,
+  User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { WEBHOOK_EVENTS, testWebhookConnection, sendToBrianStitt, type WebhookEventType } from "@/lib/mattermost";
 
 interface ApiKeyConfig {
   id: string;
@@ -109,6 +122,12 @@ export default function SettingsPage() {
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [apiKeys, setApiKeys] = useState<Record<string, Record<string, string>>>({});
   const [testingStatus, setTestingStatus] = useState<Record<string, "testing" | "success" | "error" | null>>({});
+  const [webhookEvents, setWebhookEvents] = useState<Record<WebhookEventType, boolean>>(
+    WEBHOOK_EVENTS.reduce((acc, event) => ({ ...acc, [event.type]: event.enabled }), {} as Record<WebhookEventType, boolean>)
+  );
+  const [brianStittMessage, setBrianStittMessage] = useState("");
+  const [brianStittDialogOpen, setBrianStittDialogOpen] = useState(false);
+  const [sendingMessage, setSendingMessage] = useState(false);
   const [llmConfig, setLlmConfig] = useState({
     provider: "openai",
     model: "gpt-4o",
@@ -130,13 +149,60 @@ export default function SettingsPage() {
 
   const testConnection = async (configId: string) => {
     setTestingStatus(prev => ({ ...prev, [configId]: "testing" }));
-    // Simulate API test
+    
+    if (configId === "webhook" || configId === "mattermost") {
+      // Test actual Mattermost webhook
+      const webhookUrl = apiKeys["mattermost"]?.webhook || apiKeys["webhook"]?.url;
+      if (webhookUrl) {
+        const result = await testWebhookConnection(webhookUrl);
+        setTestingStatus(prev => ({ 
+          ...prev, 
+          [configId]: result.success ? "success" : "error" 
+        }));
+        if (!result.success) {
+          alert(`Webhook test failed: ${result.error}`);
+        }
+        return;
+      }
+    }
+    
+    // Simulate API test for other integrations
     await new Promise(resolve => setTimeout(resolve, 2000));
-    // Random success/failure for demo
     setTestingStatus(prev => ({ 
       ...prev, 
       [configId]: Math.random() > 0.3 ? "success" : "error" 
     }));
+  };
+
+  const handleSendToBrianStitt = async () => {
+    const webhookUrl = apiKeys["mattermost"]?.webhook;
+    if (!webhookUrl) {
+      alert("Please configure the Mattermost webhook URL first in the Integrations tab.");
+      return;
+    }
+    if (!brianStittMessage.trim()) {
+      alert("Please enter a message.");
+      return;
+    }
+
+    setSendingMessage(true);
+    const result = await sendToBrianStitt(webhookUrl, brianStittMessage, {
+      "Sent By": "SVP Platform User",
+      "Timestamp": new Date().toLocaleString(),
+    });
+    setSendingMessage(false);
+
+    if (result.success) {
+      alert("Message sent to Brian Stitt successfully!");
+      setBrianStittMessage("");
+      setBrianStittDialogOpen(false);
+    } else {
+      alert(`Failed to send message: ${result.error}`);
+    }
+  };
+
+  const toggleWebhookEvent = (eventType: WebhookEventType) => {
+    setWebhookEvents(prev => ({ ...prev, [eventType]: !prev[eventType] }));
   };
 
   const saveSettings = () => {
@@ -444,6 +510,78 @@ export default function SettingsPage() {
 
         {/* Webhooks Tab */}
         <TabsContent value="webhooks" className="space-y-6">
+          {/* Send to Brian Stitt - Featured Card */}
+          <Card className="border-primary/50 bg-primary/5">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-primary">
+                    <User className="h-6 w-6 text-primary-foreground" />
+                  </div>
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      Send to Brian Stitt
+                      <Badge variant="default">Quick Action</Badge>
+                    </CardTitle>
+                    <CardDescription>
+                      Send a direct message to Brian Stitt&apos;s Mattermost channel
+                    </CardDescription>
+                  </div>
+                </div>
+                <Dialog open={brianStittDialogOpen} onOpenChange={setBrianStittDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button>
+                      <Send className="mr-2 h-4 w-4" />
+                      Send Message
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[500px]">
+                    <DialogHeader>
+                      <DialogTitle>Send Message to Brian Stitt</DialogTitle>
+                      <DialogDescription>
+                        This message will be sent directly to Brian Stitt&apos;s Mattermost channel via webhook.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="brianMessage">Message</Label>
+                        <Textarea
+                          id="brianMessage"
+                          placeholder="Enter your message here..."
+                          value={brianStittMessage}
+                          onChange={(e) => setBrianStittMessage(e.target.value)}
+                          rows={5}
+                        />
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        <p>The message will include:</p>
+                        <ul className="list-disc list-inside mt-1">
+                          <li>Your message content</li>
+                          <li>Timestamp</li>
+                          <li>Sender information</li>
+                        </ul>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setBrianStittDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button onClick={handleSendToBrianStitt} disabled={sendingMessage}>
+                        {sendingMessage ? (
+                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Send className="mr-2 h-4 w-4" />
+                        )}
+                        Send Message
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </CardHeader>
+          </Card>
+
+          {/* Webhook Configuration */}
           <Card>
             <CardHeader>
               <div className="flex items-center gap-3">
@@ -453,77 +591,295 @@ export default function SettingsPage() {
                 <div>
                   <CardTitle>Webhook Configuration</CardTitle>
                   <CardDescription>
-                    Configure webhooks for real-time event notifications
+                    Configure webhooks for real-time event notifications to Mattermost
                   </CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="p-4 bg-muted rounded-lg">
+                <h4 className="font-medium mb-2">Setup Instructions</h4>
+                <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
+                  <li>Go to Mattermost → Main Menu → Integrations → Incoming Webhooks</li>
+                  <li>Click &quot;Add Incoming Webhook&quot;</li>
+                  <li>Select the channel (e.g., &quot;SVP Notifications&quot;)</li>
+                  <li>Copy the webhook URL and paste it below</li>
+                </ol>
+              </div>
+
               <div className="space-y-2">
-                <Label htmlFor="webhookUrl">Webhook Endpoint URL</Label>
+                <Label htmlFor="mattermostWebhook">Mattermost Webhook URL</Label>
                 <Input
-                  id="webhookUrl"
-                  placeholder="https://your-server.com/webhook"
-                  value={apiKeys["webhook"]?.url || ""}
-                  onChange={(e) => updateApiKey("webhook", "url", e.target.value)}
+                  id="mattermostWebhook"
+                  placeholder="https://your-mattermost.com/hooks/xxx-xxx-xxx"
+                  value={apiKeys["mattermost"]?.webhook || ""}
+                  onChange={(e) => updateApiKey("mattermost", "webhook", e.target.value)}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="webhookSecret">Webhook Secret (for signature verification)</Label>
-                <div className="relative">
-                  <Input
-                    id="webhookSecret"
-                    type={showKeys["webhook"] ? "text" : "password"}
-                    placeholder="Enter webhook secret"
-                    value={apiKeys["webhook"]?.secret || ""}
-                    onChange={(e) => updateApiKey("webhook", "secret", e.target.value)}
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0 h-full"
-                    onClick={() => toggleShowKey("webhook")}
-                  >
-                    {showKeys["webhook"] ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              </div>
 
-              <div className="space-y-3 pt-4">
-                <Label>Events to Send</Label>
-                <div className="grid gap-3 md:grid-cols-2">
-                  {[
-                    "New Lead Created",
-                    "Deal Status Changed",
-                    "One-to-One Scheduled",
-                    "Affiliate Joined",
-                    "Meeting Completed",
-                    "Document Uploaded",
-                  ].map((event) => (
-                    <div key={event} className="flex items-center justify-between p-3 border rounded-lg">
-                      <span className="text-sm">{event}</span>
-                      <Switch defaultChecked />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <Button
-                variant="outline"
-                onClick={() => testConnection("webhook")}
-                disabled={testingStatus["webhook"] === "testing"}
-              >
-                {testingStatus["webhook"] === "testing" ? (
-                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <TestTube className="mr-2 h-4 w-4" />
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => testConnection("webhook")}
+                  disabled={testingStatus["webhook"] === "testing" || !apiKeys["mattermost"]?.webhook}
+                >
+                  {testingStatus["webhook"] === "testing" ? (
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  ) : testingStatus["webhook"] === "success" ? (
+                    <CheckCircle className="mr-2 h-4 w-4 text-green-500" />
+                  ) : testingStatus["webhook"] === "error" ? (
+                    <XCircle className="mr-2 h-4 w-4 text-red-500" />
+                  ) : (
+                    <TestTube className="mr-2 h-4 w-4" />
+                  )}
+                  Test Webhook
+                </Button>
+                {testingStatus["webhook"] === "success" && (
+                  <Badge variant="default" className="self-center">Connected</Badge>
                 )}
-                Send Test Webhook
-              </Button>
+                {testingStatus["webhook"] === "error" && (
+                  <Badge variant="destructive" className="self-center">Failed</Badge>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Event Configuration */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Webhook Events</CardTitle>
+              <CardDescription>
+                Choose which events trigger webhook notifications
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 md:grid-cols-2">
+                {WEBHOOK_EVENTS.map((event) => (
+                  <div 
+                    key={event.type} 
+                    className={cn(
+                      "flex items-center justify-between p-4 border rounded-lg transition-colors",
+                      event.type === "send_to_brian_stitt" && "border-primary/50 bg-primary/5",
+                      webhookEvents[event.type] && "border-green-500/50 bg-green-500/5"
+                    )}
+                  >
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{event.label}</span>
+                        {event.type === "send_to_brian_stitt" && (
+                          <Badge variant="outline" className="text-xs">Featured</Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">{event.description}</p>
+                    </div>
+                    <Switch 
+                      checked={webhookEvents[event.type]} 
+                      onCheckedChange={() => toggleWebhookEvent(event.type)}
+                    />
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Webhook Examples */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Webhook Payload Examples</CardTitle>
+              <CardDescription>
+                Reference examples based on Mattermost incoming webhook documentation
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Basic Text Message */}
+              <div className="space-y-2">
+                <h4 className="font-medium flex items-center gap-2">
+                  <Badge variant="outline">Basic</Badge>
+                  Simple Text Message
+                </h4>
+                <p className="text-sm text-muted-foreground">
+                  The simplest webhook payload - just send text content.
+                </p>
+                <pre className="p-4 bg-muted rounded-lg text-xs overflow-x-auto">
+{`{
+  "text": "Hello, this is some text\\nThis is more text. 🎉"
+}`}
+                </pre>
+              </div>
+
+              {/* With Username and Icon */}
+              <div className="space-y-2">
+                <h4 className="font-medium flex items-center gap-2">
+                  <Badge variant="outline">Customized</Badge>
+                  Custom Username & Icon
+                </h4>
+                <p className="text-sm text-muted-foreground">
+                  Override the bot username and avatar icon.
+                </p>
+                <pre className="p-4 bg-muted rounded-lg text-xs overflow-x-auto">
+{`{
+  "channel": "town-square",
+  "username": "SVP-Bot",
+  "icon_url": "https://your-site.com/logo.png",
+  "icon_emoji": ":rocket:",
+  "text": "#### New notification from SVP Platform"
+}`}
+                </pre>
+              </div>
+
+              {/* Markdown Table */}
+              <div className="space-y-2">
+                <h4 className="font-medium flex items-center gap-2">
+                  <Badge variant="outline">Advanced</Badge>
+                  Markdown with Tables
+                </h4>
+                <p className="text-sm text-muted-foreground">
+                  Rich formatting with markdown tables and @mentions.
+                </p>
+                <pre className="p-4 bg-muted rounded-lg text-xs overflow-x-auto">
+{`{
+  "channel": "svp-notifications",
+  "username": "test-automation",
+  "icon_url": "https://mattermost.com/wp-content/uploads/2022/02/icon.png",
+  "text": "#### Test results for July 27th, 2024\\n@channel please review.\\n\\n| Component | Tests Run | Tests Failed |\\n|:-----------|:-----------:|:--------------|\\n| Server | 948 | ✅ 0 |\\n| Web Client | 123 | ⚠️ 2 |\\n| iOS Client | 78 | ⚠️ 3 |"
+}`}
+                </pre>
+              </div>
+
+              {/* With Attachments */}
+              <div className="space-y-2">
+                <h4 className="font-medium flex items-center gap-2">
+                  <Badge variant="outline">Rich</Badge>
+                  Message Attachments
+                </h4>
+                <p className="text-sm text-muted-foreground">
+                  Structured attachments with colors, fields, and formatting.
+                </p>
+                <pre className="p-4 bg-muted rounded-lg text-xs overflow-x-auto">
+{`{
+  "channel": "deals",
+  "username": "SVP Platform",
+  "text": "### 🎯 New Lead Created",
+  "attachments": [{
+    "fallback": "New lead from Precision Parts",
+    "color": "#36a64f",
+    "pretext": "A new lead has been added to the pipeline",
+    "author_name": "Sarah Mitchell",
+    "author_icon": "https://example.com/avatar.png",
+    "title": "Precision Parts Manufacturing",
+    "title_link": "https://svp-platform.com/leads/123",
+    "fields": [
+      { "title": "Contact", "value": "John Harrison", "short": true },
+      { "title": "Value", "value": "$150,000", "short": true },
+      { "title": "Source", "value": "Referral", "short": true },
+      { "title": "Stage", "value": "Discovery", "short": true }
+    ],
+    "footer": "SVP Platform",
+    "footer_icon": "https://svp-platform.com/icon.png"
+  }]
+}`}
+                </pre>
+              </div>
+
+              {/* With Props Card (Side Panel) */}
+              <div className="space-y-2">
+                <h4 className="font-medium flex items-center gap-2">
+                  <Badge variant="outline">Extended</Badge>
+                  Side Panel Card
+                </h4>
+                <p className="text-sm text-muted-foreground">
+                  Display additional details in the right-hand side panel using the card property.
+                </p>
+                <pre className="p-4 bg-muted rounded-lg text-xs overflow-x-auto">
+{`{
+  "channel": "deals",
+  "username": "Winning-bot",
+  "text": "#### 🎉 We won a new deal!",
+  "props": {
+    "card": "**Deal Information:**\\n\\n[View in CRM](https://crm.example.com/deal/123)\\n\\n- **Salesperson:** Bob McKnight\\n- **Amount:** $300,020.00\\n- **Close Date:** Dec 15, 2024\\n- **Product:** V-Edge Assessment"
+  }
+}`}
+                </pre>
+              </div>
+
+              {/* Direct Message */}
+              <div className="space-y-2">
+                <h4 className="font-medium flex items-center gap-2">
+                  <Badge variant="outline">DM</Badge>
+                  Direct Message to User
+                </h4>
+                <p className="text-sm text-muted-foreground">
+                  Send a direct message to a specific user using @username.
+                </p>
+                <pre className="p-4 bg-muted rounded-lg text-xs overflow-x-auto">
+{`{
+  "channel": "@brian.stitt",
+  "username": "SVP Platform",
+  "text": "### 📬 Direct Message\\n\\nHey Brian, you have a new referral waiting for review!\\n\\n[View Referral](https://svp-platform.com/referrals/456)"
+}`}
+                </pre>
+              </div>
+
+              {/* SVP Platform Event Example */}
+              <div className="space-y-2">
+                <h4 className="font-medium flex items-center gap-2">
+                  <Badge>SVP</Badge>
+                  One-to-One Meeting Scheduled
+                </h4>
+                <p className="text-sm text-muted-foreground">
+                  Example of an SVP Platform event notification.
+                </p>
+                <pre className="p-4 bg-muted rounded-lg text-xs overflow-x-auto">
+{`{
+  "username": "SVP Platform",
+  "icon_emoji": ":handshake:",
+  "text": "### 🤝 One-to-One Meeting Scheduled",
+  "attachments": [{
+    "color": "#0066cc",
+    "fields": [
+      { "title": "Initiator", "value": "Sarah Mitchell", "short": true },
+      { "title": "Partner", "value": "Marcus Chen", "short": true },
+      { "title": "Date", "value": "Dec 15, 2024 at 10:00 AM", "short": true },
+      { "title": "Location", "value": "Starbucks, South Blvd", "short": true }
+    ],
+    "footer": "SVP Platform • Affiliate Networking"
+  }]
+}`}
+                </pre>
+              </div>
+
+              {/* Referral Submitted Example */}
+              <div className="space-y-2">
+                <h4 className="font-medium flex items-center gap-2">
+                  <Badge>SVP</Badge>
+                  Referral Submitted
+                </h4>
+                <p className="text-sm text-muted-foreground">
+                  Notification when an affiliate submits a referral.
+                </p>
+                <pre className="p-4 bg-muted rounded-lg text-xs overflow-x-auto">
+{`{
+  "username": "SVP Platform",
+  "icon_emoji": ":link:",
+  "text": "### 🔗 New Referral Submitted",
+  "attachments": [{
+    "color": "#e74c3c",
+    "fields": [
+      { "title": "From", "value": "Jennifer Rodriguez", "short": true },
+      { "title": "To", "value": "David Thompson", "short": true },
+      { "title": "Prospect", "value": "Maria Gonzalez", "short": true },
+      { "title": "Company", "value": "Lean Machine Shop", "short": true },
+      { "title": "SVP Referral", "value": "Yes ⭐", "short": true },
+      { "title": "Est. Value", "value": "$75,000", "short": true }
+    ],
+    "footer": "SVP Platform • Referral Network"
+  }],
+  "props": {
+    "card": "**Referral Details:**\\n\\n- **Type:** Short-term\\n- **Service Interest:** V-Edge Assessment\\n- **Description:** Completed lean transformation, now ready for automation assessment.\\n\\n[View Full Referral](https://svp-platform.com/referrals/ref-002)"
+  }
+}`}
+                </pre>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

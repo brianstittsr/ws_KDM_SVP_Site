@@ -406,6 +406,50 @@ export interface RockMilestoneDoc extends Omit<RockMilestone, "completedDate"> {
 }
 
 // ============================================================================
+// Strategic Partners
+// ============================================================================
+
+/** Strategic Partner document in Firestore */
+export interface StrategicPartnerDoc {
+  id: string;
+  firstName: string;
+  lastName: string;
+  company: string;
+  website: string;
+  expertise: string;
+  email?: string;
+  phone?: string;
+  linkedIn?: string;
+  logo?: string;
+  notes?: string;
+  status: "active" | "inactive" | "pending";
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+/** Team Member document in Firestore */
+export interface TeamMemberDoc {
+  id: string;
+  firstName: string;
+  lastName: string;
+  emailPrimary: string;
+  emailSecondary?: string;
+  mobile?: string;
+  expertise: string;
+  title?: string;
+  company?: string;
+  location?: string;
+  bio?: string;
+  avatar?: string;
+  linkedIn?: string;
+  website?: string;
+  role: "admin" | "team" | "affiliate" | "consultant";
+  status: "active" | "inactive" | "pending";
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// ============================================================================
 // Collection Names
 // ============================================================================
 
@@ -434,6 +478,10 @@ export const COLLECTIONS = {
   REFERRALS: "referrals",
   AFFILIATE_STATS: "affiliateStats",
   AI_MATCH_SUGGESTIONS: "aiMatchSuggestions",
+  // Strategic Partners
+  STRATEGIC_PARTNERS: "strategicPartners",
+  // Team Members
+  TEAM_MEMBERS: "teamMembers",
 } as const;
 
 // ============================================================================
@@ -472,6 +520,12 @@ export const oneToOneMeetingsCollection = () => getCollection<OneToOneMeetingDoc
 export const referralsCollection = () => getCollection<ReferralDoc>(COLLECTIONS.REFERRALS);
 export const affiliateStatsCollection = () => getCollection<AffiliateStatsDoc>(COLLECTIONS.AFFILIATE_STATS);
 export const aiMatchSuggestionsCollection = () => getCollection<AiMatchSuggestionDoc>(COLLECTIONS.AI_MATCH_SUGGESTIONS);
+
+// Strategic Partners collection reference
+export const strategicPartnersCollection = () => getCollection<StrategicPartnerDoc>(COLLECTIONS.STRATEGIC_PARTNERS);
+
+// Team Members collection reference
+export const teamMembersCollection = () => getCollection<TeamMemberDoc>(COLLECTIONS.TEAM_MEMBERS);
 
 // ============================================================================
 // Subcollection Helpers
