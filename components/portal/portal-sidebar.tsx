@@ -50,6 +50,7 @@ import {
   Battery,
   UserCog,
   Building2,
+  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -84,6 +85,12 @@ const mainNavItems = [
 ];
 
 const workItems = [
+  {
+    title: "Apollo Search",
+    href: "/portal/apollo-search",
+    icon: Search,
+    badge: "AI",
+  },
   {
     title: "Documents",
     href: "/portal/documents",
