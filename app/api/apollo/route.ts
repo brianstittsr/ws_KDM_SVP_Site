@@ -174,6 +174,134 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      case "reveal_email": {
+        // Reveal email for a specific person using Apollo's people/match endpoint
+        const personId = searchParams?.personId;
+        
+        if (!personId) {
+          return NextResponse.json(
+            { error: "Person ID is required", connected: false },
+            { status: 400 }
+          );
+        }
+
+        // Use Apollo's people endpoint to get enriched data including email
+        const response = await fetch(`${APOLLO_API_BASE}/people/match`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            id: personId,
+            reveal_personal_emails: true,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.person) {
+          return NextResponse.json({
+            connected: true,
+            email: data.person.email || data.person.personal_emails?.[0] || null,
+            person: data.person,
+          });
+        } else {
+          return NextResponse.json(
+            { connected: false, error: data.error || data.message || "Failed to reveal email" },
+            { status: response.status }
+          );
+        }
+      }
+
+      case "reveal_phone": {
+        // Reveal phone for a specific person
+        const personId = searchParams?.personId;
+        
+        if (!personId) {
+          return NextResponse.json(
+            { error: "Person ID is required", connected: false },
+            { status: 400 }
+          );
+        }
+
+        const response = await fetch(`${APOLLO_API_BASE}/people/match`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            id: personId,
+            reveal_phone_number: true,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.person) {
+          const phone = data.person.phone_numbers?.[0]?.sanitized_number || 
+                       data.person.mobile_phone || 
+                       data.person.corporate_phone || null;
+          return NextResponse.json({
+            connected: true,
+            phone,
+            person: data.person,
+          });
+        } else {
+          return NextResponse.json(
+            { connected: false, error: data.error || data.message || "Failed to reveal phone" },
+            { status: response.status }
+          );
+        }
+      }
+
+      case "bulk_reveal": {
+        // Bulk reveal emails and phones for multiple people
+        const personIds = searchParams?.personIds;
+        
+        if (!personIds || !Array.isArray(personIds) || personIds.length === 0) {
+          return NextResponse.json(
+            { error: "Person IDs array is required", connected: false },
+            { status: 400 }
+          );
+        }
+
+        // Process in batches to avoid rate limiting
+        const results: { id: string; email?: string; phone?: string }[] = [];
+        
+        for (const personId of personIds) {
+          try {
+            const response = await fetch(`${APOLLO_API_BASE}/people/match`, {
+              method: "POST",
+              headers,
+              body: JSON.stringify({
+                id: personId,
+                reveal_personal_emails: true,
+                reveal_phone_number: true,
+              }),
+            });
+
+            const data = await response.json();
+            
+            if (response.ok && data.person) {
+              results.push({
+                id: personId,
+                email: data.person.email || data.person.personal_emails?.[0] || undefined,
+                phone: data.person.phone_numbers?.[0]?.sanitized_number || 
+                       data.person.mobile_phone || 
+                       data.person.corporate_phone || undefined,
+              });
+            }
+          } catch (err) {
+            console.error(`Error revealing contact ${personId}:`, err);
+          }
+          
+          // Small delay to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        return NextResponse.json({
+          connected: true,
+          results,
+          total: results.length,
+        });
+      }
+
       default:
         return NextResponse.json(
           { error: "Unknown action", connected: false },

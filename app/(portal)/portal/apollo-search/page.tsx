@@ -59,6 +59,9 @@ import {
   AlertCircle,
   Settings,
   Link2,
+  Unlock,
+  Lock,
+  UserPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { db } from "@/lib/firebase";
@@ -141,6 +144,8 @@ interface SearchResult {
   avatar?: string;
   companySize?: string;
   industry?: string;
+  emailStatus?: "locked" | "unlocking" | "unlocked" | "error";
+  phoneStatus?: "locked" | "unlocking" | "unlocked" | "error";
 }
 
 interface SuggestedAction {
@@ -492,6 +497,139 @@ export default function ApolloSearchPage() {
 
   // Generate unique ID for messages
   const generateMessageId = () => `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+  // State for tracking which contacts are being revealed
+  const [revealingContacts, setRevealingContacts] = useState<Set<string>>(new Set());
+  const [bulkRevealing, setBulkRevealing] = useState(false);
+
+  // Reveal email for a single contact
+  const revealEmail = async (personId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card selection
+    if (!apolloApiKey || revealingContacts.has(`email-${personId}`)) return;
+
+    setRevealingContacts(prev => new Set(prev).add(`email-${personId}`));
+
+    try {
+      const response = await fetch("/api/apollo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "reveal_email",
+          apiKey: apolloApiKey,
+          searchParams: { personId },
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.email) {
+        // Update the result in messages
+        setMessages(prev => prev.map(msg => ({
+          ...msg,
+          results: msg.results?.map(r => 
+            r.id === personId ? { ...r, email: data.email, emailStatus: "unlocked" as const } : r
+          ),
+        })));
+      }
+    } catch (error) {
+      console.error("Error revealing email:", error);
+    } finally {
+      setRevealingContacts(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(`email-${personId}`);
+        return newSet;
+      });
+    }
+  };
+
+  // Reveal phone for a single contact
+  const revealPhone = async (personId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!apolloApiKey || revealingContacts.has(`phone-${personId}`)) return;
+
+    setRevealingContacts(prev => new Set(prev).add(`phone-${personId}`));
+
+    try {
+      const response = await fetch("/api/apollo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "reveal_phone",
+          apiKey: apolloApiKey,
+          searchParams: { personId },
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.phone) {
+        setMessages(prev => prev.map(msg => ({
+          ...msg,
+          results: msg.results?.map(r => 
+            r.id === personId ? { ...r, phone: data.phone, phoneStatus: "unlocked" as const } : r
+          ),
+        })));
+      }
+    } catch (error) {
+      console.error("Error revealing phone:", error);
+    } finally {
+      setRevealingContacts(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(`phone-${personId}`);
+        return newSet;
+      });
+    }
+  };
+
+  // Bulk reveal emails and phones for selected contacts
+  const bulkRevealContacts = async () => {
+    if (!apolloApiKey || selectedResults.size === 0 || bulkRevealing) return;
+
+    setBulkRevealing(true);
+    const personIds = Array.from(selectedResults);
+
+    try {
+      const response = await fetch("/api/apollo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "bulk_reveal",
+          apiKey: apolloApiKey,
+          searchParams: { personIds },
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.results) {
+        // Update all revealed contacts
+        const revealedMap = new Map<string, { id: string; email?: string; phone?: string }>(
+          data.results.map((r: { id: string; email?: string; phone?: string }) => [r.id, r])
+        );
+        
+        setMessages(prev => prev.map(msg => ({
+          ...msg,
+          results: msg.results?.map(r => {
+            const revealed = revealedMap.get(r.id);
+            if (revealed) {
+              return {
+                ...r,
+                email: revealed.email || r.email,
+                phone: revealed.phone || r.phone,
+                emailStatus: revealed.email ? "unlocked" as const : r.emailStatus,
+                phoneStatus: revealed.phone ? "unlocked" as const : r.phoneStatus,
+              };
+            }
+            return r;
+          }),
+        })));
+      }
+    } catch (error) {
+      console.error("Error bulk revealing contacts:", error);
+    } finally {
+      setBulkRevealing(false);
+    }
+  };
 
   const handleSendMessage = async () => {
     if (!inputValue.trim() || isLoading) return;
@@ -895,22 +1033,49 @@ export default function ApolloSearchPage() {
                                         </>
                                       )}
                                     </div>
-                                    {(result.email || result.phone) && (
-                                      <div className="flex gap-3 mt-2">
-                                        {result.email && (
-                                          <span className="text-xs text-blue-600 flex items-center gap-1">
+                                    <div className="flex gap-2 mt-2">
+                                      {/* Email reveal/display */}
+                                      {result.email && !result.email.includes("email_not_unlocked") ? (
+                                        <span className="text-xs text-blue-600 flex items-center gap-1">
+                                          <Mail className="h-3 w-3" />
+                                          {result.email}
+                                        </span>
+                                      ) : (
+                                        <button
+                                          onClick={(e) => revealEmail(result.id, e)}
+                                          disabled={revealingContacts.has(`email-${result.id}`)}
+                                          className="text-xs px-2 py-1 rounded bg-blue-50 hover:bg-blue-100 text-blue-600 flex items-center gap-1 transition-colors disabled:opacity-50"
+                                        >
+                                          {revealingContacts.has(`email-${result.id}`) ? (
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                          ) : (
                                             <Mail className="h-3 w-3" />
-                                            {result.email}
-                                          </span>
-                                        )}
-                                        {result.phone && (
-                                          <span className="text-xs text-green-600 flex items-center gap-1">
+                                          )}
+                                          {revealingContacts.has(`email-${result.id}`) ? "Revealing..." : "Reveal Email"}
+                                        </button>
+                                      )}
+                                      
+                                      {/* Phone reveal/display */}
+                                      {result.phone ? (
+                                        <span className="text-xs text-green-600 flex items-center gap-1">
+                                          <Phone className="h-3 w-3" />
+                                          {result.phone}
+                                        </span>
+                                      ) : (
+                                        <button
+                                          onClick={(e) => revealPhone(result.id, e)}
+                                          disabled={revealingContacts.has(`phone-${result.id}`)}
+                                          className="text-xs px-2 py-1 rounded bg-green-50 hover:bg-green-100 text-green-600 flex items-center gap-1 transition-colors disabled:opacity-50"
+                                        >
+                                          {revealingContacts.has(`phone-${result.id}`) ? (
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                          ) : (
                                             <Phone className="h-3 w-3" />
-                                            {result.phone}
-                                          </span>
-                                        )}
-                                      </div>
-                                    )}
+                                          )}
+                                          {revealingContacts.has(`phone-${result.id}`) ? "Revealing..." : "Reveal Phone"}
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
                                   <div
                                     className={cn(
@@ -937,6 +1102,22 @@ export default function ApolloSearchPage() {
                               Actions for {selectedResults.size} selected prospect(s):
                             </p>
                             <div className="flex flex-wrap gap-2">
+                              {/* Bulk Reveal Button */}
+                              <Button
+                                variant="default"
+                                size="sm"
+                                className="h-8 text-xs bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700"
+                                onClick={bulkRevealContacts}
+                                disabled={bulkRevealing}
+                              >
+                                {bulkRevealing ? (
+                                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                ) : (
+                                  <Unlock className="h-3 w-3 mr-1" />
+                                )}
+                                {bulkRevealing ? "Revealing..." : `Reveal All Contacts (${selectedResults.size})`}
+                              </Button>
+                              
                               {message.suggestedActions.map((action) => (
                                 <Button
                                   key={action.id}
