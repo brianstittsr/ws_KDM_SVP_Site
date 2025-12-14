@@ -65,8 +65,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { db } from "@/lib/firebase";
-import { doc, getDoc } from "firebase/firestore";
-import { COLLECTIONS } from "@/lib/schema";
+import { doc, getDoc, collection, getDocs, addDoc, updateDoc, query, where, Timestamp } from "firebase/firestore";
+import { COLLECTIONS, type ApolloPurchasedContactDoc, type ApolloSavedListDoc, type SavedListContact } from "@/lib/schema";
 
 // Connection status type
 type ConnectionStatus = "connected" | "disconnected" | "checking" | "error" | "no_key";
@@ -124,6 +124,7 @@ interface ChatMessage {
 interface SearchCriteria {
   titles?: string[];
   companies?: string[];
+  companyName?: string;
   industries?: string[];
   locations?: string[];
   companySize?: string;
@@ -135,8 +136,11 @@ interface SearchCriteria {
 interface SearchResult {
   id: string;
   name: string;
+  firstName?: string;
+  lastName?: string;
   title: string;
   company: string;
+  companyId?: string;
   location: string;
   email?: string;
   phone?: string;
@@ -144,8 +148,10 @@ interface SearchResult {
   avatar?: string;
   companySize?: string;
   industry?: string;
-  emailStatus?: "locked" | "unlocking" | "unlocked" | "error";
-  phoneStatus?: "locked" | "unlocking" | "unlocked" | "error";
+  emailStatus?: "locked" | "unlocking" | "unlocked" | "purchased" | "error";
+  phoneStatus?: "locked" | "unlocking" | "unlocked" | "purchased" | "error";
+  emailPurchased?: boolean;
+  phonePurchased?: boolean;
 }
 
 interface SuggestedAction {
@@ -362,6 +368,22 @@ export default function ApolloSearchPage() {
   const [apolloApiKey, setApolloApiKey] = useState<string>("");
   const [connectionError, setConnectionError] = useState<string>("");
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
+  
+  // Company search state
+  const [companySearchMode, setCompanySearchMode] = useState(false);
+  const [companyName, setCompanyName] = useState("");
+  const [titleFilter, setTitleFilter] = useState("");
+  
+  // Purchased contacts state
+  const [purchasedContacts, setPurchasedContacts] = useState<ApolloPurchasedContactDoc[]>([]);
+  const [showPurchasedPanel, setShowPurchasedPanel] = useState(false);
+  
+  // Saved lists state
+  const [savedLists, setSavedLists] = useState<ApolloSavedListDoc[]>([]);
+  const [showAddToListDialog, setShowAddToListDialog] = useState(false);
+  const [newListName, setNewListName] = useState("");
+  const [selectedListId, setSelectedListId] = useState<string | null>(null);
+  const [addingToList, setAddingToList] = useState(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -444,6 +466,226 @@ export default function ApolloSearchPage() {
     }
   };
 
+  // Load purchased contacts from Firebase
+  const loadPurchasedContacts = async () => {
+    if (!db) return;
+    try {
+      const querySnapshot = await getDocs(collection(db, COLLECTIONS.APOLLO_PURCHASED_CONTACTS));
+      const contacts: ApolloPurchasedContactDoc[] = [];
+      querySnapshot.forEach((docSnap) => {
+        contacts.push({ id: docSnap.id, ...docSnap.data() } as ApolloPurchasedContactDoc);
+      });
+      setPurchasedContacts(contacts);
+    } catch (error) {
+      console.error("Error loading purchased contacts:", error);
+    }
+  };
+
+  // Load purchased contacts on mount
+  useEffect(() => {
+    loadPurchasedContacts();
+    loadSavedLists();
+  }, []);
+
+  // Load saved lists from Firebase
+  const loadSavedLists = async () => {
+    if (!db) return;
+    try {
+      const querySnapshot = await getDocs(collection(db, COLLECTIONS.APOLLO_SAVED_LISTS));
+      const lists: ApolloSavedListDoc[] = [];
+      querySnapshot.forEach((docSnap) => {
+        lists.push({ id: docSnap.id, ...docSnap.data() } as ApolloSavedListDoc);
+      });
+      setSavedLists(lists);
+    } catch (error) {
+      console.error("Error loading saved lists:", error);
+    }
+  };
+
+  // Export results to CSV
+  const exportToCSV = (data: SearchResult[] | ApolloPurchasedContactDoc[], filename: string) => {
+    if (data.length === 0) return;
+    
+    // Determine headers based on data type
+    const headers = ["Name", "Title", "Company", "Location", "Industry", "Company Size", "Email", "Phone", "LinkedIn"];
+    
+    // Convert data to CSV rows
+    const rows = data.map((item) => {
+      const row = [
+        item.name || "",
+        item.title || "",
+        item.company || "",
+        item.location || "",
+        item.industry || "",
+        item.companySize || "",
+        item.email || "",
+        item.phone || "",
+        item.linkedIn || "",
+      ];
+      // Escape commas and quotes in values
+      return row.map(val => {
+        if (val.includes(",") || val.includes('"') || val.includes("\n")) {
+          return `"${val.replace(/"/g, '""')}"`;
+        }
+        return val;
+      }).join(",");
+    });
+    
+    // Combine headers and rows
+    const csvContent = [headers.join(","), ...rows].join("\n");
+    
+    // Create and download file
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${filename}_${new Date().toISOString().split("T")[0]}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Add results to a saved list (grouped by company then title)
+  const addResultsToList = async (results: SearchResult[], listId: string | null, newListName?: string) => {
+    if (!db || results.length === 0) return;
+    
+    setAddingToList(true);
+    
+    try {
+      // Sort results by company, then by title
+      const sortedResults = [...results].sort((a, b) => {
+        const companyCompare = (a.company || "").localeCompare(b.company || "");
+        if (companyCompare !== 0) return companyCompare;
+        return (a.title || "").localeCompare(b.title || "");
+      });
+      
+      // Convert to SavedListContact format (filter out undefined values for Firebase)
+      const contacts = sortedResults.map((result) => {
+        const contact: Record<string, unknown> = {
+          apolloId: result.id,
+          name: result.name || "",
+          title: result.title || "",
+          company: result.company || "",
+          addedAt: Timestamp.now(),
+        };
+        // Only add optional fields if they have values
+        if (result.firstName) contact.firstName = result.firstName;
+        if (result.lastName) contact.lastName = result.lastName;
+        if (result.companyId) contact.companyId = result.companyId;
+        if (result.location) contact.location = result.location;
+        if (result.industry) contact.industry = result.industry;
+        if (result.companySize) contact.companySize = result.companySize;
+        if (result.email) contact.email = result.email;
+        if (result.phone) contact.phone = result.phone;
+        if (result.linkedIn) contact.linkedIn = result.linkedIn;
+        return contact;
+      });
+      
+      if (listId) {
+        // Add to existing list
+        const listRef = doc(db, COLLECTIONS.APOLLO_SAVED_LISTS, listId);
+        const listSnap = await getDoc(listRef);
+        
+        if (listSnap.exists()) {
+          const existingContacts = listSnap.data().contacts || [];
+          // Merge contacts, avoiding duplicates by apolloId
+          const existingIds = new Set(existingContacts.map((c: SavedListContact) => c.apolloId));
+          const newContacts = contacts.filter((c) => !existingIds.has(c.apolloId as string));
+          
+          await updateDoc(listRef, {
+            contacts: [...existingContacts, ...newContacts],
+            updatedAt: Timestamp.now(),
+          });
+        }
+      } else if (newListName) {
+        // Create new list (use plain object to avoid undefined values)
+        const newList = {
+          name: newListName,
+          contacts,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+        };
+        await addDoc(collection(db, COLLECTIONS.APOLLO_SAVED_LISTS), newList);
+      }
+      
+      // Reload lists
+      await loadSavedLists();
+      setShowAddToListDialog(false);
+      setNewListName("");
+      setSelectedListId(null);
+    } catch (error) {
+      console.error("Error adding to list:", error);
+    } finally {
+      setAddingToList(false);
+    }
+  };
+
+  // Save purchased contact to Firebase
+  const savePurchasedContact = async (
+    result: SearchResult,
+    type: "email" | "phone",
+    value: string
+  ): Promise<void> => {
+    if (!db) return;
+    
+    try {
+      // Check if contact already exists
+      const existingQuery = query(
+        collection(db, COLLECTIONS.APOLLO_PURCHASED_CONTACTS),
+        where("apolloId", "==", result.id)
+      );
+      const existingDocs = await getDocs(existingQuery);
+      
+      if (!existingDocs.empty) {
+        // Update existing contact
+        const existingDoc = existingDocs.docs[0];
+        const updateData: Record<string, unknown> = {
+          updatedAt: Timestamp.now(),
+        };
+        if (type === "email") {
+          updateData.email = value;
+          updateData.emailPurchased = true;
+          updateData.emailPurchasedAt = Timestamp.now();
+        } else {
+          updateData.phone = value;
+          updateData.phonePurchased = true;
+          updateData.phonePurchasedAt = Timestamp.now();
+        }
+        await updateDoc(doc(db, COLLECTIONS.APOLLO_PURCHASED_CONTACTS, existingDoc.id), updateData);
+      } else {
+        // Create new contact
+        const newContact: Omit<ApolloPurchasedContactDoc, "id"> = {
+          apolloId: result.id,
+          firstName: result.firstName || result.name.split(" ")[0] || "",
+          lastName: result.lastName || result.name.split(" ").slice(1).join(" ") || "",
+          name: result.name,
+          title: result.title,
+          company: result.company,
+          companyId: result.companyId,
+          location: result.location,
+          industry: result.industry,
+          companySize: result.companySize,
+          linkedIn: result.linkedIn,
+          email: type === "email" ? value : undefined,
+          phone: type === "phone" ? value : undefined,
+          emailPurchased: type === "email",
+          phonePurchased: type === "phone",
+          emailPurchasedAt: type === "email" ? Timestamp.now() : undefined,
+          phonePurchasedAt: type === "phone" ? Timestamp.now() : undefined,
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+        };
+        await addDoc(collection(db, COLLECTIONS.APOLLO_PURCHASED_CONTACTS), newContact);
+      }
+      
+      // Reload purchased contacts
+      await loadPurchasedContacts();
+    } catch (error) {
+      console.error("Error saving purchased contact:", error);
+    }
+  };
+
   // Search Apollo API
   const searchApolloAPI = async (searchCriteria: SearchCriteria): Promise<SearchResult[]> => {
     if (!apolloApiKey || connectionStatus !== "connected") {
@@ -451,13 +693,17 @@ export default function ApolloSearchPage() {
     }
 
     try {
+      // Determine which action to use based on search criteria
+      const useCompanySearch = searchCriteria.companyName && searchCriteria.companyName.trim();
+      
       const response = await fetch("/api/apollo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "search_people",
+          action: useCompanySearch ? "search_by_company_title" : "search_people",
           apiKey: apolloApiKey,
           searchParams: {
+            companyName: searchCriteria.companyName || "",
             titles: searchCriteria.titles || [],
             locations: searchCriteria.locations || [],
             industries: searchCriteria.industries || [],
@@ -474,8 +720,11 @@ export default function ApolloSearchPage() {
         return data.results.map((person: any) => ({
           id: person.id || Math.random().toString(),
           name: `${person.first_name || ""} ${person.last_name || ""}`.trim(),
+          firstName: person.first_name || "",
+          lastName: person.last_name || "",
           title: person.title || "Unknown",
           company: person.organization?.name || "Unknown",
+          companyId: person.organization?.id || undefined,
           location: person.city && person.state 
             ? `${person.city}, ${person.state}` 
             : person.country || "Unknown",
@@ -495,6 +744,61 @@ export default function ApolloSearchPage() {
     }
   };
 
+  // Search by company and title directly
+  const searchByCompanyTitle = async () => {
+    if (!apolloApiKey || connectionStatus !== "connected" || !companyName.trim()) {
+      return;
+    }
+
+    setIsLoading(true);
+    
+    // Add user message
+    const userMessage: ChatMessage = {
+      id: generateMessageId(),
+      role: "user",
+      content: `Search for ${titleFilter || "people"} at "${companyName}"`,
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, userMessage]);
+
+    try {
+      const searchCriteria: SearchCriteria = {
+        companyName: companyName.trim(),
+        titles: titleFilter ? [titleFilter] : [],
+      };
+      
+      const results = await searchApolloAPI(searchCriteria);
+      
+      const responseMessage: ChatMessage = {
+        id: generateMessageId(),
+        role: "assistant",
+        content: results.length > 0
+          ? `✅ **Found ${results.length} people** at "${companyName}"${titleFilter ? ` with title matching "${titleFilter}"` : ""}.\n\nYou can purchase email or phone numbers for any contact below.`
+          : `🔍 **No results found** for "${companyName}"${titleFilter ? ` with title "${titleFilter}"` : ""}. Try a different company name or remove the title filter.`,
+        timestamp: new Date(),
+        searchCriteria,
+        results: results.length > 0 ? results : undefined,
+        suggestedActions: results.length > 0 ? [
+          { id: "1", type: "list", label: "Save to List", description: "Add to a list", icon: ListFilter },
+          { id: "2", type: "enrich", label: "Enrich All", description: "Get all contact info", icon: Database },
+        ] : undefined,
+      };
+      
+      setMessages((prev) => [...prev, responseMessage]);
+    } catch (error) {
+      console.error("Search error:", error);
+      const errorMessage: ChatMessage = {
+        id: generateMessageId(),
+        role: "assistant",
+        content: "❌ **Search failed**. Please try again.",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Generate unique ID for messages
   const generateMessageId = () => `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -502,12 +806,12 @@ export default function ApolloSearchPage() {
   const [revealingContacts, setRevealingContacts] = useState<Set<string>>(new Set());
   const [bulkRevealing, setBulkRevealing] = useState(false);
 
-  // Reveal email for a single contact
-  const revealEmail = async (personId: string, e: React.MouseEvent) => {
+  // Purchase email for a single contact (reveal + save to Firebase)
+  const purchaseEmail = async (result: SearchResult, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent card selection
-    if (!apolloApiKey || revealingContacts.has(`email-${personId}`)) return;
+    if (!apolloApiKey || revealingContacts.has(`email-${result.id}`)) return;
 
-    setRevealingContacts(prev => new Set(prev).add(`email-${personId}`));
+    setRevealingContacts(prev => new Set(prev).add(`email-${result.id}`));
 
     try {
       const response = await fetch("/api/apollo", {
@@ -516,7 +820,13 @@ export default function ApolloSearchPage() {
         body: JSON.stringify({
           action: "reveal_email",
           apiKey: apolloApiKey,
-          searchParams: { personId },
+          searchParams: { 
+            personId: result.id,
+            firstName: result.firstName,
+            lastName: result.lastName,
+            company: result.company,
+            linkedIn: result.linkedIn,
+          },
         }),
       });
 
@@ -527,27 +837,30 @@ export default function ApolloSearchPage() {
         setMessages(prev => prev.map(msg => ({
           ...msg,
           results: msg.results?.map(r => 
-            r.id === personId ? { ...r, email: data.email, emailStatus: "unlocked" as const } : r
+            r.id === result.id ? { ...r, email: data.email, emailStatus: "purchased" as const, emailPurchased: true } : r
           ),
         })));
+        
+        // Save to Firebase
+        await savePurchasedContact(result, "email", data.email);
       }
     } catch (error) {
-      console.error("Error revealing email:", error);
+      console.error("Error purchasing email:", error);
     } finally {
       setRevealingContacts(prev => {
         const newSet = new Set(prev);
-        newSet.delete(`email-${personId}`);
+        newSet.delete(`email-${result.id}`);
         return newSet;
       });
     }
   };
 
-  // Reveal phone for a single contact
-  const revealPhone = async (personId: string, e: React.MouseEvent) => {
+  // Purchase phone for a single contact (reveal + save to Firebase)
+  const purchasePhone = async (result: SearchResult, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!apolloApiKey || revealingContacts.has(`phone-${personId}`)) return;
+    if (!apolloApiKey || revealingContacts.has(`phone-${result.id}`)) return;
 
-    setRevealingContacts(prev => new Set(prev).add(`phone-${personId}`));
+    setRevealingContacts(prev => new Set(prev).add(`phone-${result.id}`));
 
     try {
       const response = await fetch("/api/apollo", {
@@ -556,7 +869,13 @@ export default function ApolloSearchPage() {
         body: JSON.stringify({
           action: "reveal_phone",
           apiKey: apolloApiKey,
-          searchParams: { personId },
+          searchParams: { 
+            personId: result.id,
+            firstName: result.firstName,
+            lastName: result.lastName,
+            company: result.company,
+            linkedIn: result.linkedIn,
+          },
         }),
       });
 
@@ -566,16 +885,19 @@ export default function ApolloSearchPage() {
         setMessages(prev => prev.map(msg => ({
           ...msg,
           results: msg.results?.map(r => 
-            r.id === personId ? { ...r, phone: data.phone, phoneStatus: "unlocked" as const } : r
+            r.id === result.id ? { ...r, phone: data.phone, phoneStatus: "purchased" as const, phonePurchased: true } : r
           ),
         })));
+        
+        // Save to Firebase
+        await savePurchasedContact(result, "phone", data.phone);
       }
     } catch (error) {
-      console.error("Error revealing phone:", error);
+      console.error("Error purchasing phone:", error);
     } finally {
       setRevealingContacts(prev => {
         const newSet = new Set(prev);
-        newSet.delete(`phone-${personId}`);
+        newSet.delete(`phone-${result.id}`);
         return newSet;
       });
     }
@@ -628,6 +950,166 @@ export default function ApolloSearchPage() {
       console.error("Error bulk revealing contacts:", error);
     } finally {
       setBulkRevealing(false);
+    }
+  };
+
+  // Purchase email for a contact in a saved list
+  const purchaseListContactEmail = async (
+    listId: string, 
+    contact: { apolloId: string; name: string; firstName?: string; lastName?: string; company: string; linkedIn?: string },
+    e: React.MouseEvent
+  ) => {
+    e.stopPropagation();
+    const apolloId = contact.apolloId;
+    if (!apolloApiKey || !db || revealingContacts.has(`list-email-${apolloId}`)) return;
+
+    setRevealingContacts(prev => new Set(prev).add(`list-email-${apolloId}`));
+
+    try {
+      // Parse name if firstName/lastName not available
+      let firstName = contact.firstName;
+      let lastName = contact.lastName;
+      if (!firstName || !lastName) {
+        const nameParts = contact.name.split(" ");
+        firstName = nameParts[0] || "";
+        lastName = nameParts.slice(1).join(" ") || "";
+      }
+
+      const response = await fetch("/api/apollo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "reveal_email",
+          apiKey: apolloApiKey,
+          searchParams: { 
+            personId: apolloId,
+            firstName,
+            lastName,
+            company: contact.company,
+            linkedIn: contact.linkedIn,
+          },
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.email) {
+        // Update the saved list in Firebase
+        const listRef = doc(db, COLLECTIONS.APOLLO_SAVED_LISTS, listId);
+        const listSnap = await getDoc(listRef);
+        
+        if (listSnap.exists()) {
+          const listData = listSnap.data();
+          const updatedContacts = [...(listData.contacts || [])];
+          
+          // Find and update the contact
+          const contactIdx = updatedContacts.findIndex((c: { apolloId: string }) => c.apolloId === apolloId);
+          if (contactIdx !== -1) {
+            updatedContacts[contactIdx] = {
+              ...updatedContacts[contactIdx],
+              email: data.email,
+            };
+            
+            await updateDoc(listRef, {
+              contacts: updatedContacts,
+              updatedAt: Timestamp.now(),
+            });
+          }
+        }
+        
+        // Reload saved lists
+        await loadSavedLists();
+      } else {
+        console.error("No email returned from Apollo:", data);
+      }
+    } catch (error) {
+      console.error("Error purchasing email for list contact:", error);
+    } finally {
+      setRevealingContacts(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(`list-email-${apolloId}`);
+        return newSet;
+      });
+    }
+  };
+
+  // Purchase phone for a contact in a saved list
+  const purchaseListContactPhone = async (
+    listId: string, 
+    contact: { apolloId: string; name: string; firstName?: string; lastName?: string; company: string; linkedIn?: string },
+    e: React.MouseEvent
+  ) => {
+    e.stopPropagation();
+    const apolloId = contact.apolloId;
+    if (!apolloApiKey || !db || revealingContacts.has(`list-phone-${apolloId}`)) return;
+
+    setRevealingContacts(prev => new Set(prev).add(`list-phone-${apolloId}`));
+
+    try {
+      // Parse name if firstName/lastName not available
+      let firstName = contact.firstName;
+      let lastName = contact.lastName;
+      if (!firstName || !lastName) {
+        const nameParts = contact.name.split(" ");
+        firstName = nameParts[0] || "";
+        lastName = nameParts.slice(1).join(" ") || "";
+      }
+
+      const response = await fetch("/api/apollo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "reveal_phone",
+          apiKey: apolloApiKey,
+          searchParams: { 
+            personId: apolloId,
+            firstName,
+            lastName,
+            company: contact.company,
+            linkedIn: contact.linkedIn,
+          },
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.phone) {
+        // Update the saved list in Firebase
+        const listRef = doc(db, COLLECTIONS.APOLLO_SAVED_LISTS, listId);
+        const listSnap = await getDoc(listRef);
+        
+        if (listSnap.exists()) {
+          const listData = listSnap.data();
+          const updatedContacts = [...(listData.contacts || [])];
+          
+          // Find and update the contact
+          const contactIdx = updatedContacts.findIndex((c: { apolloId: string }) => c.apolloId === apolloId);
+          if (contactIdx !== -1) {
+            updatedContacts[contactIdx] = {
+              ...updatedContacts[contactIdx],
+              phone: data.phone,
+            };
+            
+            await updateDoc(listRef, {
+              contacts: updatedContacts,
+              updatedAt: Timestamp.now(),
+            });
+          }
+        }
+        
+        // Reload saved lists
+        await loadSavedLists();
+      } else {
+        console.error("No phone returned from Apollo:", data);
+      }
+    } catch (error) {
+      console.error("Error purchasing phone for list contact:", error);
+    } finally {
+      setRevealingContacts(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(`list-phone-${apolloId}`);
+        return newSet;
+      });
     }
   };
 
@@ -763,10 +1245,15 @@ export default function ApolloSearchPage() {
     setSelectedResults(new Set());
   };
 
-  // Get all results from messages
-  const allResults = messages
-    .filter((m) => m.results)
-    .flatMap((m) => m.results || []);
+  // Get all results from messages (deduplicated by id)
+  const allResults = Array.from(
+    new Map(
+      messages
+        .filter((m) => m.results)
+        .flatMap((m) => m.results || [])
+        .map((result) => [result.id, result])
+    ).values()
+  );
 
   // Connection status badge component
   const ConnectionStatusBadge = () => {
@@ -897,16 +1384,30 @@ export default function ApolloSearchPage() {
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0 overflow-hidden">
             <div className="border-b px-4">
-              <TabsList className="h-10">
-                <TabsTrigger value="chat" className="gap-2">
-                  <MessageSquare className="h-4 w-4" />
-                  AI Chat
-                </TabsTrigger>
-                <TabsTrigger value="results" className="gap-2">
-                  <Users className="h-4 w-4" />
-                  Results ({allResults.length})
-                </TabsTrigger>
-              </TabsList>
+              <div className="flex items-center justify-between">
+                <TabsList className="h-10">
+                  <TabsTrigger value="chat" className="gap-2">
+                    <MessageSquare className="h-4 w-4" />
+                    AI Chat
+                  </TabsTrigger>
+                  <TabsTrigger value="company" className="gap-2">
+                    <Building2 className="h-4 w-4" />
+                    Company Search
+                  </TabsTrigger>
+                  <TabsTrigger value="results" className="gap-2">
+                    <Users className="h-4 w-4" />
+                    Results ({allResults.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="purchased" className="gap-2">
+                    <UserPlus className="h-4 w-4" />
+                    Purchased ({purchasedContacts.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="lists" className="gap-2">
+                    <ListFilter className="h-4 w-4" />
+                    Saved Lists ({savedLists.length})
+                  </TabsTrigger>
+                </TabsList>
+              </div>
             </div>
 
             <TabsContent value="chat" className="flex-1 flex flex-col m-0 min-h-0 overflow-hidden">
@@ -1034,45 +1535,53 @@ export default function ApolloSearchPage() {
                                       )}
                                     </div>
                                     <div className="flex gap-2 mt-2">
-                                      {/* Email reveal/display */}
+                                      {/* Email purchase/display */}
                                       {result.email && !result.email.includes("email_not_unlocked") ? (
-                                        <span className="text-xs text-blue-600 flex items-center gap-1">
+                                        <span className={cn(
+                                          "text-xs flex items-center gap-1",
+                                          result.emailPurchased ? "text-purple-600 font-medium" : "text-blue-600"
+                                        )}>
                                           <Mail className="h-3 w-3" />
                                           {result.email}
+                                          {result.emailPurchased && <CheckCircle className="h-3 w-3" />}
                                         </span>
                                       ) : (
                                         <button
-                                          onClick={(e) => revealEmail(result.id, e)}
+                                          onClick={(e) => purchaseEmail(result, e)}
                                           disabled={revealingContacts.has(`email-${result.id}`)}
-                                          className="text-xs px-2 py-1 rounded bg-blue-50 hover:bg-blue-100 text-blue-600 flex items-center gap-1 transition-colors disabled:opacity-50"
+                                          className="text-xs px-2 py-1 rounded bg-purple-50 hover:bg-purple-100 text-purple-600 flex items-center gap-1 transition-colors disabled:opacity-50 border border-purple-200"
                                         >
                                           {revealingContacts.has(`email-${result.id}`) ? (
                                             <Loader2 className="h-3 w-3 animate-spin" />
                                           ) : (
                                             <Mail className="h-3 w-3" />
                                           )}
-                                          {revealingContacts.has(`email-${result.id}`) ? "Revealing..." : "Reveal Email"}
+                                          {revealingContacts.has(`email-${result.id}`) ? "Purchasing..." : "Purchase Email"}
                                         </button>
                                       )}
                                       
-                                      {/* Phone reveal/display */}
+                                      {/* Phone purchase/display */}
                                       {result.phone ? (
-                                        <span className="text-xs text-green-600 flex items-center gap-1">
+                                        <span className={cn(
+                                          "text-xs flex items-center gap-1",
+                                          result.phonePurchased ? "text-purple-600 font-medium" : "text-green-600"
+                                        )}>
                                           <Phone className="h-3 w-3" />
                                           {result.phone}
+                                          {result.phonePurchased && <CheckCircle className="h-3 w-3" />}
                                         </span>
                                       ) : (
                                         <button
-                                          onClick={(e) => revealPhone(result.id, e)}
+                                          onClick={(e) => purchasePhone(result, e)}
                                           disabled={revealingContacts.has(`phone-${result.id}`)}
-                                          className="text-xs px-2 py-1 rounded bg-green-50 hover:bg-green-100 text-green-600 flex items-center gap-1 transition-colors disabled:opacity-50"
+                                          className="text-xs px-2 py-1 rounded bg-purple-50 hover:bg-purple-100 text-purple-600 flex items-center gap-1 transition-colors disabled:opacity-50 border border-purple-200"
                                         >
                                           {revealingContacts.has(`phone-${result.id}`) ? (
                                             <Loader2 className="h-3 w-3 animate-spin" />
                                           ) : (
                                             <Phone className="h-3 w-3" />
                                           )}
-                                          {revealingContacts.has(`phone-${result.id}`) ? "Revealing..." : "Reveal Phone"}
+                                          {revealingContacts.has(`phone-${result.id}`) ? "Purchasing..." : "Purchase Phone"}
                                         </button>
                                       )}
                                     </div>
@@ -1228,11 +1737,19 @@ export default function ApolloSearchPage() {
                           {allResults.length} Prospects Found
                         </h3>
                         <div className="flex gap-2">
-                          <Button variant="outline" size="sm">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => exportToCSV(allResults, "apollo_search_results")}
+                          >
                             <Download className="h-4 w-4 mr-2" />
-                            Export
+                            Export CSV
                           </Button>
-                          <Button variant="outline" size="sm">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => setShowAddToListDialog(true)}
+                          >
                             <Plus className="h-4 w-4 mr-2" />
                             Add to List
                           </Button>
@@ -1311,6 +1828,310 @@ export default function ApolloSearchPage() {
                           </Card>
                         ))}
                       </div>
+                    </>
+                  )}
+                </div>
+              </ScrollArea>
+            </TabsContent>
+
+            {/* Company Search Tab */}
+            <TabsContent value="company" className="flex-1 flex flex-col m-0 min-h-0 overflow-hidden">
+              <div className="p-4 max-w-2xl mx-auto w-full">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Building2 className="h-5 w-5" />
+                      Search by Company & Title
+                    </CardTitle>
+                    <CardDescription>
+                      Find people at a specific company, optionally filtered by job title
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Company Name *</label>
+                      <Input
+                        placeholder="e.g., Google, Microsoft, Acme Corp"
+                        value={companyName}
+                        onChange={(e) => setCompanyName(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Job Title (optional)</label>
+                      <Input
+                        placeholder="e.g., CEO, VP of Sales, Marketing Director"
+                        value={titleFilter}
+                        onChange={(e) => setTitleFilter(e.target.value)}
+                      />
+                    </div>
+                    <Button 
+                      onClick={searchByCompanyTitle}
+                      disabled={!companyName.trim() || isLoading || connectionStatus !== "connected"}
+                      className="w-full"
+                    >
+                      {isLoading ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Search className="h-4 w-4 mr-2" />
+                      )}
+                      Search People
+                    </Button>
+                    {connectionStatus !== "connected" && (
+                      <p className="text-sm text-muted-foreground text-center">
+                        Connect to Apollo in Settings to search
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
+            {/* Purchased Contacts Tab */}
+            <TabsContent value="purchased" className="flex-1 m-0 min-h-0 overflow-hidden">
+              <ScrollArea className="h-full min-h-0 p-4">
+                <div className="max-w-4xl mx-auto space-y-4">
+                  {purchasedContacts.length === 0 ? (
+                    <div className="text-center py-12">
+                      <UserPlus className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                      <h3 className="text-lg font-medium">No purchased contacts yet</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Purchase email or phone numbers from search results to see them here
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-medium">
+                          {purchasedContacts.length} Purchased Contact{purchasedContacts.length !== 1 ? "s" : ""}
+                        </h3>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => exportToCSV(purchasedContacts, "purchased_contacts")}
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Export CSV
+                        </Button>
+                      </div>
+                      
+                      {/* Group by company */}
+                      {Object.entries(
+                        purchasedContacts.reduce((acc, contact) => {
+                          const company = contact.company || "Unknown Company";
+                          if (!acc[company]) acc[company] = [];
+                          acc[company].push(contact);
+                          return acc;
+                        }, {} as Record<string, ApolloPurchasedContactDoc[]>)
+                      ).map(([company, contacts]) => (
+                        <Card key={company}>
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-base flex items-center gap-2">
+                              <Building2 className="h-4 w-4" />
+                              {company}
+                              <Badge variant="secondary" className="ml-2">
+                                {contacts.length} contact{contacts.length !== 1 ? "s" : ""}
+                              </Badge>
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-3">
+                              {contacts.map((contact) => (
+                                <div key={contact.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
+                                  <Avatar className="h-10 w-10">
+                                    <AvatarFallback>
+                                      {contact.name.split(" ").map((n) => n[0]).join("")}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-sm">{contact.name}</p>
+                                    <p className="text-xs text-muted-foreground">{contact.title}</p>
+                                    {contact.location && (
+                                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                                        <MapPin className="h-3 w-3" />
+                                        {contact.location}
+                                      </p>
+                                    )}
+                                    <div className="flex gap-3 mt-2">
+                                      {contact.emailPurchased && contact.email && (
+                                        <span className="text-xs text-purple-600 flex items-center gap-1">
+                                          <Mail className="h-3 w-3" />
+                                          {contact.email}
+                                          <CheckCircle className="h-3 w-3" />
+                                        </span>
+                                      )}
+                                      {contact.phonePurchased && contact.phone && (
+                                        <span className="text-xs text-purple-600 flex items-center gap-1">
+                                          <Phone className="h-3 w-3" />
+                                          {contact.phone}
+                                          <CheckCircle className="h-3 w-3" />
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </ScrollArea>
+            </TabsContent>
+
+            {/* Saved Lists Tab */}
+            <TabsContent value="lists" className="flex-1 m-0 min-h-0 overflow-hidden">
+              <ScrollArea className="h-full min-h-0 p-4">
+                <div className="max-w-4xl mx-auto space-y-4">
+                  {savedLists.length === 0 ? (
+                    <div className="text-center py-12">
+                      <ListFilter className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                      <h3 className="text-lg font-medium">No saved lists yet</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Use the "Add to List" button in the Results tab to create lists
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-medium">
+                          {savedLists.length} Saved List{savedLists.length !== 1 ? "s" : ""}
+                        </h3>
+                      </div>
+                      
+                      {savedLists.map((list) => {
+                        // Group contacts by company, then sort by title within each company
+                        const contactsByCompany = (list.contacts || []).reduce((acc, contact) => {
+                          const company = contact.company || "Unknown Company";
+                          if (!acc[company]) acc[company] = [];
+                          acc[company].push(contact);
+                          return acc;
+                        }, {} as Record<string, SavedListContact[]>);
+                        
+                        // Sort contacts within each company by title
+                        Object.keys(contactsByCompany).forEach((company) => {
+                          contactsByCompany[company].sort((a, b) => 
+                            (a.title || "").localeCompare(b.title || "")
+                          );
+                        });
+                        
+                        return (
+                          <Card key={list.id}>
+                            <CardHeader className="pb-2">
+                              <div className="flex items-center justify-between">
+                                <CardTitle className="text-lg flex items-center gap-2">
+                                  <ListFilter className="h-5 w-5" />
+                                  {list.name}
+                                </CardTitle>
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="secondary">
+                                    {list.contacts?.length || 0} contacts
+                                  </Badge>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      // Convert SavedListContact to format compatible with exportToCSV
+                                      const exportData = (list.contacts || []).map(c => ({
+                                        ...c,
+                                        id: c.apolloId,
+                                      })) as unknown as SearchResult[];
+                                      exportToCSV(exportData, `list_${list.name.replace(/\s+/g, "_")}`);
+                                    }}
+                                  >
+                                    <Download className="h-4 w-4 mr-1" />
+                                    Export
+                                  </Button>
+                                </div>
+                              </div>
+                              <CardDescription>
+                                Created {list.createdAt?.toDate?.()?.toLocaleDateString() || "Unknown"}
+                              </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="space-y-4">
+                                {Object.entries(contactsByCompany)
+                                  .sort(([a], [b]) => a.localeCompare(b))
+                                  .map(([company, contacts]) => (
+                                  <div key={company} className="border rounded-lg p-3">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <Building2 className="h-4 w-4 text-muted-foreground" />
+                                      <span className="font-medium text-sm">{company}</span>
+                                      <Badge variant="outline" className="text-xs">
+                                        {contacts.length}
+                                      </Badge>
+                                    </div>
+                                    <div className="space-y-3 pl-6">
+                                      {contacts.map((contact, idx) => (
+                                        <div key={idx} className="flex items-start gap-3 text-sm p-2 rounded-lg hover:bg-muted/50">
+                                          <Avatar className="h-8 w-8">
+                                            <AvatarFallback className="text-xs">
+                                              {contact.name.split(" ").map((n) => n[0]).join("")}
+                                            </AvatarFallback>
+                                          </Avatar>
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2">
+                                              <span className="font-medium">{contact.name}</span>
+                                              <span className="text-muted-foreground">•</span>
+                                              <span className="text-muted-foreground text-xs">{contact.title}</span>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2 mt-1">
+                                              {/* Email display or purchase button */}
+                                              {contact.email ? (
+                                                <span className="text-xs text-purple-600 flex items-center gap-1 bg-purple-50 px-2 py-0.5 rounded">
+                                                  <Mail className="h-3 w-3" />
+                                                  {contact.email}
+                                                  <CheckCircle className="h-3 w-3" />
+                                                </span>
+                                              ) : (
+                                                <button
+                                                  onClick={(e) => purchaseListContactEmail(list.id, contact, e)}
+                                                  disabled={revealingContacts.has(`list-email-${contact.apolloId}`) || connectionStatus !== "connected"}
+                                                  className="text-xs px-2 py-0.5 rounded bg-purple-50 hover:bg-purple-100 text-purple-600 flex items-center gap-1 transition-colors disabled:opacity-50 border border-purple-200"
+                                                >
+                                                  {revealingContacts.has(`list-email-${contact.apolloId}`) ? (
+                                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                                  ) : (
+                                                    <Mail className="h-3 w-3" />
+                                                  )}
+                                                  {revealingContacts.has(`list-email-${contact.apolloId}`) ? "..." : "Email"}
+                                                </button>
+                                              )}
+                                              
+                                              {/* Phone display or purchase button */}
+                                              {contact.phone ? (
+                                                <span className="text-xs text-purple-600 flex items-center gap-1 bg-purple-50 px-2 py-0.5 rounded">
+                                                  <Phone className="h-3 w-3" />
+                                                  {contact.phone}
+                                                  <CheckCircle className="h-3 w-3" />
+                                                </span>
+                                              ) : (
+                                                <button
+                                                  onClick={(e) => purchaseListContactPhone(list.id, contact, e)}
+                                                  disabled={revealingContacts.has(`list-phone-${contact.apolloId}`) || connectionStatus !== "connected"}
+                                                  className="text-xs px-2 py-0.5 rounded bg-purple-50 hover:bg-purple-100 text-purple-600 flex items-center gap-1 transition-colors disabled:opacity-50 border border-purple-200"
+                                                >
+                                                  {revealingContacts.has(`list-phone-${contact.apolloId}`) ? (
+                                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                                  ) : (
+                                                    <Phone className="h-3 w-3" />
+                                                  )}
+                                                  {revealingContacts.has(`list-phone-${contact.apolloId}`) ? "..." : "Phone"}
+                                                </button>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
                     </>
                   )}
                 </div>
@@ -1489,6 +2310,112 @@ export default function ApolloSearchPage() {
           </ScrollArea>
         </div>
       </div>
+
+      {/* Add to List Dialog */}
+      {showAddToListDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className="w-full max-w-md mx-4">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ListFilter className="h-5 w-5" />
+                Add to List
+              </CardTitle>
+              <CardDescription>
+                Add {allResults.length} prospect{allResults.length !== 1 ? "s" : ""} to a list (organized by company, then title)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Existing Lists */}
+              {savedLists.length > 0 && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Add to existing list</label>
+                  <Select
+                    value={selectedListId || ""}
+                    onValueChange={(value) => {
+                      setSelectedListId(value || null);
+                      if (value) setNewListName("");
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a list..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {savedLists.map((list) => (
+                        <SelectItem key={list.id} value={list.id}>
+                          {list.name} ({list.contacts?.length || 0} contacts)
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {savedLists.length > 0 && (
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">Or</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Create New List */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Create new list</label>
+                <Input
+                  placeholder="Enter list name..."
+                  value={newListName}
+                  onChange={(e) => {
+                    setNewListName(e.target.value);
+                    if (e.target.value) setSelectedListId(null);
+                  }}
+                />
+              </div>
+
+              {/* Preview */}
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="text-xs text-muted-foreground mb-2">Preview: Contacts will be organized by</p>
+                <div className="flex items-center gap-2 text-sm">
+                  <Badge variant="outline">
+                    <Building2 className="h-3 w-3 mr-1" />
+                    Company
+                  </Badge>
+                  <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                  <Badge variant="outline">
+                    <Briefcase className="h-3 w-3 mr-1" />
+                    Title
+                  </Badge>
+                </div>
+              </div>
+            </CardContent>
+            <div className="flex justify-end gap-2 p-4 pt-0">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowAddToListDialog(false);
+                  setNewListName("");
+                  setSelectedListId(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => addResultsToList(allResults, selectedListId, newListName)}
+                disabled={(!selectedListId && !newListName.trim()) || addingToList}
+              >
+                {addingToList ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4 mr-2" />
+                )}
+                {addingToList ? "Adding..." : "Add to List"}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

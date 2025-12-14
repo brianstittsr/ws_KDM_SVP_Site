@@ -409,6 +409,13 @@ export interface RockMilestoneDoc extends Omit<RockMilestone, "completedDate"> {
 // Strategic Partners
 // ============================================================================
 
+/** Zoom Recording entry for Strategic Partners */
+export interface ZoomRecording {
+  title: string;
+  url: string;
+  date?: string;
+}
+
 /** Strategic Partner document in Firestore */
 export interface StrategicPartnerDoc {
   id: string;
@@ -422,6 +429,7 @@ export interface StrategicPartnerDoc {
   linkedIn?: string;
   logo?: string;
   notes?: string;
+  zoomRecordings?: ZoomRecording[];
   status: "active" | "inactive" | "pending";
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -498,6 +506,62 @@ export interface PlatformSettingsDoc {
 }
 
 // ============================================================================
+// Apollo Purchased Contacts
+// ============================================================================
+
+/** Purchased contact from Apollo */
+export interface ApolloPurchasedContactDoc {
+  id: string;
+  apolloId: string;
+  firstName: string;
+  lastName: string;
+  name: string;
+  title: string;
+  company: string;
+  companyId?: string;
+  location?: string;
+  industry?: string;
+  companySize?: string;
+  email?: string;
+  phone?: string;
+  linkedIn?: string;
+  emailPurchased: boolean;
+  phonePurchased: boolean;
+  emailPurchasedAt?: Timestamp;
+  phonePurchasedAt?: Timestamp;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+/** Contact entry in a saved list */
+export interface SavedListContact {
+  apolloId: string;
+  name: string;
+  firstName?: string;
+  lastName?: string;
+  title: string;
+  company: string;
+  companyId?: string;
+  location?: string;
+  industry?: string;
+  companySize?: string;
+  email?: string;
+  phone?: string;
+  linkedIn?: string;
+  addedAt: Timestamp;
+}
+
+/** Saved prospect list */
+export interface ApolloSavedListDoc {
+  id: string;
+  name: string;
+  description?: string;
+  contacts: SavedListContact[];
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// ============================================================================
 // Collection Names
 // ============================================================================
 
@@ -532,6 +596,10 @@ export const COLLECTIONS = {
   TEAM_MEMBERS: "teamMembers",
   // Platform Settings
   PLATFORM_SETTINGS: "platformSettings",
+  // Apollo Purchased Contacts
+  APOLLO_PURCHASED_CONTACTS: "apolloPurchasedContacts",
+  // Apollo Saved Lists
+  APOLLO_SAVED_LISTS: "apolloSavedLists",
 } as const;
 
 // ============================================================================
