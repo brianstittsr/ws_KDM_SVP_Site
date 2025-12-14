@@ -715,6 +715,140 @@ export interface ThomasNetSavedListDoc {
 }
 
 // ============================================================================
+// GoHighLevel Integration Types
+// ============================================================================
+
+/** GoHighLevel Integration configuration */
+export interface GHLIntegrationDoc {
+  id: string;
+  // API Configuration
+  apiToken: string;
+  locationId: string;
+  agencyId?: string;
+  // Integration Settings
+  name: string;
+  description?: string;
+  isActive: boolean;
+  // Sync Settings
+  syncContacts: boolean;
+  syncOpportunities: boolean;
+  syncCalendars: boolean;
+  syncPipelines: boolean;
+  syncCampaigns: boolean;
+  // Mapping Configuration
+  contactMapping: Record<string, string>;
+  // Pipeline Configuration
+  defaultPipelineId?: string;
+  defaultStageId?: string;
+  // Webhook Configuration
+  webhookUrl?: string;
+  webhookSecret?: string;
+  enableWebhooks: boolean;
+  // Last Sync Information
+  lastSyncAt?: Timestamp;
+  lastSyncStatus: 'success' | 'error' | 'pending' | 'never';
+  lastSyncError?: string;
+  totalContactsSynced: number;
+  totalOpportunitiesSynced: number;
+  // Rate Limiting
+  rateLimitRemaining?: number;
+  rateLimitReset?: Timestamp;
+  // Metadata
+  createdBy: string;
+  lastModifiedBy: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+/** GoHighLevel Sync Log */
+export interface GHLSyncLogDoc {
+  id: string;
+  integrationId: string;
+  // Sync Details
+  syncType: 'contacts' | 'opportunities' | 'calendars' | 'pipelines' | 'campaigns' | 'full';
+  status: 'started' | 'in_progress' | 'completed' | 'failed';
+  // Statistics
+  recordsProcessed: number;
+  recordsSuccessful: number;
+  recordsFailed: number;
+  // Timing
+  startedAt: Timestamp;
+  completedAt?: Timestamp;
+  duration?: number;
+  // Errors
+  errors: Array<{
+    recordId?: string;
+    error: string;
+    details?: unknown;
+  }>;
+  // Summary
+  summary?: {
+    contactsCreated: number;
+    contactsUpdated: number;
+    opportunitiesCreated: number;
+    opportunitiesUpdated: number;
+  };
+  // Metadata
+  triggeredBy: string;
+  triggerType: 'manual' | 'scheduled' | 'webhook' | 'event';
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+/** GoHighLevel Workflow (AI-generated) */
+export interface GHLWorkflowDoc {
+  id: string;
+  name: string;
+  description: string;
+  workflow: object;
+  status: 'draft' | 'deployed' | 'archived';
+  ghlWorkflowId?: string;
+  createdBy: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  deployedAt?: Timestamp;
+}
+
+/** GoHighLevel Imported Workflow */
+export interface GHLImportedWorkflowDoc {
+  id: string;
+  ghlWorkflowId: string;
+  name: string;
+  description: string;
+  status: string;
+  originalFormat: object;
+  trigger: object;
+  actions: unknown[];
+  plainLanguagePrompt?: string;
+  importedAt: Timestamp;
+  convertedAt?: Timestamp;
+  locationId: string;
+}
+
+/** Calendar Event (built-in calendar) */
+export interface CalendarEventDoc {
+  id: string;
+  title: string;
+  description?: string;
+  startDate: Timestamp;
+  endDate: Timestamp;
+  allDay?: boolean;
+  type: 'meeting' | 'rock' | 'todo' | 'issue' | 'custom';
+  color?: string;
+  attendees?: string[];
+  location?: string;
+  recurringFrequency?: 'daily' | 'weekly' | 'monthly';
+  recurringUntil?: Timestamp;
+  // Traction references
+  rockId?: string;
+  todoId?: string;
+  issueId?: string;
+  meetingId?: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// ============================================================================
 // Collection Names
 // ============================================================================
 
@@ -764,6 +898,13 @@ export const COLLECTIONS = {
   TRACTION_TODOS: "tractionTodos",
   TRACTION_MEETINGS: "tractionMeetings",
   TRACTION_TEAM_MEMBERS: "tractionTeamMembers",
+  // GoHighLevel Integration Collections
+  GHL_INTEGRATIONS: "gohighlevelIntegrations",
+  GHL_SYNC_LOGS: "gohighlevelSyncLogs",
+  GHL_WORKFLOWS: "ghlWorkflows",
+  GHL_IMPORTED_WORKFLOWS: "ghlImportedWorkflows",
+  // Calendar Events (built-in calendar)
+  CALENDAR_EVENTS: "calendarEvents",
 } as const;
 
 // ============================================================================
