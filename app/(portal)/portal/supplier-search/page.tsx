@@ -437,124 +437,33 @@ export default function SupplierSearchPage() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header */}
-        <div className="border-b px-6 py-4 flex-shrink-0 bg-gradient-to-r from-slate-800 to-slate-700">
-          <div className="max-w-4xl mx-auto">
-            <h1 className="text-2xl font-bold text-white text-center mb-4">
-              Search 500,000+ Trusted Industrial Suppliers
-            </h1>
-            
-            {/* Search Type Tabs */}
-            <div className="flex justify-center gap-1 mb-4">
-              <Button
-                variant={searchType === "all" ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setSearchType("all")}
-                className={searchType === "all" ? "bg-white text-slate-800" : "text-white hover:bg-slate-600"}
-              >
-                All Suppliers
-              </Button>
-              <Button
-                variant={searchType === "name" ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setSearchType("name")}
-                className={searchType === "name" ? "bg-white text-slate-800" : "text-white hover:bg-slate-600"}
-              >
-                Suppliers by Name
-              </Button>
-              <Button
-                variant={searchType === "brand" ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setSearchType("brand")}
-                className={searchType === "brand" ? "bg-white text-slate-800" : "text-white hover:bg-slate-600"}
-              >
-                Suppliers by Brand
-              </Button>
-              <Button
-                variant={searchType === "catalogs" ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setSearchType("catalogs")}
-                className={searchType === "catalogs" ? "bg-white text-slate-800" : "text-white hover:bg-slate-600"}
-              >
-                Product Catalogs
-              </Button>
-            </div>
-
-            {/* Search Bar */}
-            <div className="flex gap-2">
-              <div className="flex-1 relative">
-                <Input
-                  placeholder={
-                    searchType === "all" ? "Describe what you're looking for — Be as detailed as you like" :
-                    searchType === "name" ? "Enter supplier company name..." :
-                    searchType === "brand" ? "Enter brand name..." :
-                    "Search product catalogs..."
-                  }
-                  value={directSearchQuery}
-                  onChange={(e) => setDirectSearchQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && directSearchQuery.trim()) {
-                      setInputValue(directSearchQuery);
-                      handleSendMessage();
-                    }
-                  }}
-                  className="bg-white h-12 text-base pr-4"
-                />
+        <div className="border-b px-6 py-4 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-orange-500 to-amber-600">
+                <Factory className="h-6 w-6 text-white" />
               </div>
-              <Select value={regionFilter} onValueChange={setRegionFilter}>
-                <SelectTrigger className="w-36 bg-white h-12">
-                  <SelectValue placeholder="All Regions" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Regions</SelectItem>
-                  <SelectItem value="northeast">Northeast</SelectItem>
-                  <SelectItem value="southeast">Southeast</SelectItem>
-                  <SelectItem value="midwest">Midwest</SelectItem>
-                  <SelectItem value="southwest">Southwest</SelectItem>
-                  <SelectItem value="west">West</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button 
-                className="h-12 px-6 bg-blue-600 hover:bg-blue-700"
-                onClick={() => {
-                  if (directSearchQuery.trim()) {
-                    setInputValue(directSearchQuery);
-                    handleSendMessage();
-                  }
-                }}
-                disabled={isLoading || !directSearchQuery.trim()}
-              >
-                {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
-                Search
-              </Button>
+              <div>
+                <h1 className="text-xl font-semibold flex items-center gap-2">
+                  Supplier Search
+                  <Badge variant="secondary" className="text-xs">
+                    <Sparkles className="h-3 w-3 mr-1" />
+                    AI Powered
+                  </Badge>
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  Search 500,000+ Trusted Industrial Suppliers
+                </p>
+              </div>
             </div>
-
-            <p className="text-center text-slate-300 text-sm mt-2">
-              <Sparkles className="h-3 w-3 inline mr-1" />
-              Introducing Smart Search. Instantly find and evaluate suppliers based on their products, services, and specific capabilities — all in one place.
-            </p>
-          </div>
-        </div>
-
-        {/* Action Bar */}
-        <div className="border-b px-6 py-2 flex-shrink-0 flex items-center justify-between bg-muted/30">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-xs">
-              <Factory className="h-3 w-3 mr-1" />
-              ThomasNet Integration
-            </Badge>
-            {allResults.length > 0 && (
-              <span className="text-sm text-muted-foreground">
-                {allResults.length} suppliers found
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {selectedSuppliers.size > 0 && (
-              <Button size="sm" onClick={() => setShowAddToListDialog(true)}>
-                <Save className="h-4 w-4 mr-2" />
-                Save {selectedSuppliers.size} Selected
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {selectedSuppliers.size > 0 && (
+                <Button onClick={() => setShowAddToListDialog(true)}>
+                  <Save className="h-4 w-4 mr-2" />
+                  Save {selectedSuppliers.size} Selected
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -569,6 +478,22 @@ export default function SupplierSearchPage() {
               <TabsTrigger value="category" className="gap-2">
                 <Factory className="h-4 w-4" />
                 Category Search
+              </TabsTrigger>
+              <TabsTrigger value="all-suppliers" className="gap-2">
+                <Building2 className="h-4 w-4" />
+                All Suppliers
+              </TabsTrigger>
+              <TabsTrigger value="by-name" className="gap-2">
+                <Search className="h-4 w-4" />
+                By Name
+              </TabsTrigger>
+              <TabsTrigger value="by-brand" className="gap-2">
+                <Award className="h-4 w-4" />
+                By Brand
+              </TabsTrigger>
+              <TabsTrigger value="catalogs" className="gap-2">
+                <FileText className="h-4 w-4" />
+                Product Catalogs
               </TabsTrigger>
               <TabsTrigger value="results" className="gap-2">
                 <Building2 className="h-4 w-4" />
@@ -810,6 +735,206 @@ export default function SupplierSearchPage() {
                   ))}
                 </div>
               </div>
+            </div>
+          </TabsContent>
+
+          {/* All Suppliers Tab */}
+          <TabsContent value="all-suppliers" className="flex-1 flex flex-col m-0 min-h-0 overflow-hidden">
+            <div className="p-4 max-w-2xl mx-auto w-full">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Building2 className="h-5 w-5" />
+                    All Suppliers Search
+                  </CardTitle>
+                  <CardDescription>
+                    Describe what you&apos;re looking for — Be as detailed as you like
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Search Query</label>
+                    <Input
+                      placeholder="e.g., CNC machining suppliers with ISO certification"
+                      value={directSearchQuery}
+                      onChange={(e) => setDirectSearchQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && directSearchQuery.trim()) {
+                          setInputValue(directSearchQuery);
+                          handleSendMessage();
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Region (optional)</label>
+                    <Select value={regionFilter} onValueChange={setRegionFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Regions" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Regions</SelectItem>
+                        <SelectItem value="northeast">Northeast</SelectItem>
+                        <SelectItem value="southeast">Southeast</SelectItem>
+                        <SelectItem value="midwest">Midwest</SelectItem>
+                        <SelectItem value="southwest">Southwest</SelectItem>
+                        <SelectItem value="west">West</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    onClick={() => {
+                      if (directSearchQuery.trim()) {
+                        setInputValue(directSearchQuery);
+                        handleSendMessage();
+                      }
+                    }}
+                    disabled={!directSearchQuery.trim() || isLoading}
+                    className="w-full"
+                  >
+                    {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
+                    Search All Suppliers
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* By Name Tab */}
+          <TabsContent value="by-name" className="flex-1 flex flex-col m-0 min-h-0 overflow-hidden">
+            <div className="p-4 max-w-2xl mx-auto w-full">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Search className="h-5 w-5" />
+                    Search Suppliers by Name
+                  </CardTitle>
+                  <CardDescription>
+                    Find a specific supplier by company name
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Company Name</label>
+                    <Input
+                      placeholder="Enter supplier company name..."
+                      value={directSearchQuery}
+                      onChange={(e) => setDirectSearchQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && directSearchQuery.trim()) {
+                          setInputValue(directSearchQuery);
+                          handleSendMessage();
+                        }
+                      }}
+                    />
+                  </div>
+                  <Button
+                    onClick={() => {
+                      if (directSearchQuery.trim()) {
+                        setInputValue(directSearchQuery);
+                        handleSendMessage();
+                      }
+                    }}
+                    disabled={!directSearchQuery.trim() || isLoading}
+                    className="w-full"
+                  >
+                    {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
+                    Search by Name
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* By Brand Tab */}
+          <TabsContent value="by-brand" className="flex-1 flex flex-col m-0 min-h-0 overflow-hidden">
+            <div className="p-4 max-w-2xl mx-auto w-full">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Award className="h-5 w-5" />
+                    Search Suppliers by Brand
+                  </CardTitle>
+                  <CardDescription>
+                    Find suppliers that carry specific brands or products
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Brand Name</label>
+                    <Input
+                      placeholder="Enter brand name..."
+                      value={directSearchQuery}
+                      onChange={(e) => setDirectSearchQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && directSearchQuery.trim()) {
+                          setInputValue(`${directSearchQuery} brand suppliers`);
+                          handleSendMessage();
+                        }
+                      }}
+                    />
+                  </div>
+                  <Button
+                    onClick={() => {
+                      if (directSearchQuery.trim()) {
+                        setInputValue(`${directSearchQuery} brand suppliers`);
+                        handleSendMessage();
+                      }
+                    }}
+                    disabled={!directSearchQuery.trim() || isLoading}
+                    className="w-full"
+                  >
+                    {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
+                    Search by Brand
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* Product Catalogs Tab */}
+          <TabsContent value="catalogs" className="flex-1 flex flex-col m-0 min-h-0 overflow-hidden">
+            <div className="p-4 max-w-2xl mx-auto w-full">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="h-5 w-5" />
+                    Product Catalogs
+                  </CardTitle>
+                  <CardDescription>
+                    Search product catalogs and specifications
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Product or Catalog Search</label>
+                    <Input
+                      placeholder="Search product catalogs..."
+                      value={directSearchQuery}
+                      onChange={(e) => setDirectSearchQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && directSearchQuery.trim()) {
+                          setInputValue(`${directSearchQuery} product catalog`);
+                          handleSendMessage();
+                        }
+                      }}
+                    />
+                  </div>
+                  <Button
+                    onClick={() => {
+                      if (directSearchQuery.trim()) {
+                        setInputValue(`${directSearchQuery} product catalog`);
+                        handleSendMessage();
+                      }
+                    }}
+                    disabled={!directSearchQuery.trim() || isLoading}
+                    className="w-full"
+                  >
+                    {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
+                    Search Catalogs
+                  </Button>
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
 
