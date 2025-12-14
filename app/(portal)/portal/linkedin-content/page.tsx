@@ -122,24 +122,96 @@ export default function LinkedInContentPage() {
       storytelling: "narrative and engaging",
     };
     
+    // Generate content based on selected length
+    const generateLongContent = () => {
+      const topic = articleTopic.toLowerCase();
+      const topicTitle = articleTopic;
+      
+      return `In today's rapidly evolving business landscape, ${topic} has emerged as one of the most critical factors determining organizational success. As we navigate through unprecedented changes in technology, market dynamics, and customer expectations, understanding and mastering ${topic} has never been more important.
+
+## The Current State of ${topicTitle}
+
+Over the past decade, we've witnessed a fundamental shift in how businesses approach ${topic}. What was once considered a peripheral concern has now moved to the center of strategic planning for organizations of all sizes. This transformation hasn't happened overnight—it's been driven by a confluence of factors including technological advancement, changing consumer behavior, and increased global competition.
+
+The statistics are compelling. Recent industry research indicates that companies who prioritize ${topic} see an average of 23% higher revenue growth compared to their peers. Moreover, organizations that have fully integrated ${topic} into their operations report significantly higher employee satisfaction and customer retention rates.
+
+## Why ${topicTitle} Matters Now More Than Ever
+
+The business environment we operate in today is fundamentally different from even five years ago. The pace of change has accelerated dramatically, and the companies that thrive are those that can adapt quickly while maintaining their core values and mission.
+
+**1. Digital Transformation Has Changed Everything**
+
+The digital revolution has reshaped every industry, and ${topic} is no exception. Companies that have embraced digital tools and platforms to enhance their approach to ${topic} are seeing remarkable results. From automation to artificial intelligence, technology is enabling organizations to do more with less while delivering better outcomes.
+
+**2. Customer Expectations Have Evolved**
+
+Today's customers are more informed, more demanding, and have more choices than ever before. They expect companies to excel at ${topic}, and they're quick to switch to competitors who can deliver better experiences. This has raised the stakes for businesses across all sectors.
+
+**3. Talent Acquisition and Retention**
+
+The best employees want to work for companies that are leaders in their field. Organizations that demonstrate excellence in ${topic} have a significant advantage in attracting and retaining top talent. This creates a virtuous cycle where great people drive even better results.
+
+## Key Strategies for Success in ${topicTitle}
+
+Based on my experience working with organizations across various industries, I've identified several strategies that consistently lead to success in ${topic}:
+
+### Strategy 1: Start with a Clear Vision
+
+Before implementing any tactical changes, it's essential to have a clear vision of what success looks like. This means defining specific, measurable goals and ensuring alignment across all levels of the organization. Without this foundation, even the best initiatives can lose direction and momentum.
+
+### Strategy 2: Invest in Your People
+
+Technology and processes are important, but people are the ultimate differentiator. Organizations that invest in training, development, and empowerment see the best results in ${topic}. This includes not just technical skills, but also soft skills like communication, collaboration, and creative problem-solving.
+
+### Strategy 3: Embrace Continuous Improvement
+
+The best organizations never stop learning and improving. They create cultures where experimentation is encouraged, failure is seen as a learning opportunity, and everyone is empowered to suggest improvements. This mindset is essential for staying ahead in a rapidly changing environment.
+
+### Strategy 4: Measure What Matters
+
+You can't improve what you don't measure. Successful organizations establish clear metrics for ${topic} and track them rigorously. But it's equally important to focus on the right metrics—those that truly reflect progress toward your goals rather than vanity metrics that look good but don't drive real results.
+
+### Strategy 5: Build Strong Partnerships
+
+No organization can excel at everything. The most successful companies build ecosystems of partners who complement their strengths and help them deliver better outcomes. This collaborative approach is especially important in ${topic}, where the landscape is constantly evolving.
+
+## Common Pitfalls to Avoid
+
+While there are many paths to success, there are also common mistakes that can derail even the most well-intentioned efforts:
+
+- **Moving too fast without proper planning**: Enthusiasm is great, but rushing into major changes without adequate preparation often leads to costly mistakes.
+
+- **Ignoring organizational culture**: Technical solutions alone won't solve cultural problems. Any initiative related to ${topic} must account for the human element.
+
+- **Failing to communicate effectively**: Change requires buy-in from all stakeholders. Organizations that don't invest in communication often face resistance and slow adoption.
+
+- **Underestimating resource requirements**: Successful implementation of ${topic} initiatives requires adequate investment in time, money, and people.
+
+## Looking Ahead: The Future of ${topicTitle}
+
+As we look to the future, several trends are likely to shape the evolution of ${topic}:
+
+The integration of artificial intelligence and machine learning will continue to accelerate, enabling more sophisticated and personalized approaches. Organizations that learn to leverage these technologies effectively will have significant advantages.
+
+Sustainability and social responsibility will become increasingly important considerations. Stakeholders—including customers, employees, and investors—are demanding that companies demonstrate commitment to broader societal goals.
+
+The boundaries between industries will continue to blur, creating both challenges and opportunities. Companies that can adapt to this new reality and find innovative ways to apply ${topic} across different contexts will thrive.
+
+## Conclusion
+
+${topicTitle} is not just a business function—it's a strategic imperative that can determine the success or failure of organizations in today's competitive landscape. By understanding its importance, implementing proven strategies, and avoiding common pitfalls, leaders can position their organizations for sustained success.
+
+The journey toward excellence in ${topic} is ongoing. It requires commitment, investment, and a willingness to continuously learn and adapt. But for those who embrace this challenge, the rewards—in terms of business performance, employee engagement, and customer satisfaction—are substantial.
+
+I'd love to hear your thoughts and experiences with ${topic}. What strategies have worked for your organization? What challenges have you faced? Let's continue this conversation in the comments.
+
+#${topicTitle.replace(/\s+/g, "")} #BusinessStrategy #Leadership #ProfessionalDevelopment #Innovation #DigitalTransformation #BusinessGrowth #ThoughtLeadership`;
+    };
+
     // Generate mock content based on topic
     const generated: GeneratedContent = {
       title: `${articleTopic}: Key Insights for Industry Leaders`,
-      content: `In today's rapidly evolving business landscape, ${articleTopic.toLowerCase()} has become a critical factor for success.
-
-As industry professionals, we must stay ahead of the curve and embrace new strategies that drive growth and innovation.
-
-Here are three key insights I've gathered from my experience:
-
-1. **Embrace Change**: The most successful organizations are those that adapt quickly to market shifts. ${articleTopic} is no exception.
-
-2. **Focus on Value**: Rather than chasing trends, focus on delivering genuine value to your customers and stakeholders.
-
-3. **Build Relationships**: Strong professional networks are invaluable. Connect with others in your industry and share knowledge freely.
-
-I'd love to hear your thoughts on this topic. What strategies have worked for you?
-
-#${articleTopic.replace(/\s+/g, "")} #BusinessStrategy #ProfessionalDevelopment #Leadership`,
+      content: generateLongContent(),
       hashtags: [
         articleTopic.replace(/\s+/g, ""),
         "BusinessStrategy",
