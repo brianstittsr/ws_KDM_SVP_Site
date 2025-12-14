@@ -129,6 +129,12 @@ const workItems = [
     icon: Linkedin,
     badge: "AI",
   },
+  {
+    title: "Traction Dashboard",
+    href: "/portal/traction",
+    icon: Target,
+    badge: "EOS",
+  },
 ];
 
 const adminItems = [
