@@ -118,6 +118,36 @@ const documents = [
     uploadedAt: "2024-12-20",
     shared: true,
   },
+  {
+    id: "8",
+    name: "ABC Manufacturing - Master Service Agreement.pdf",
+    type: "pdf",
+    size: "1.2 MB",
+    folder: "Agreements",
+    uploadedBy: "Brian Stitt",
+    uploadedAt: "2025-01-06",
+    shared: true,
+  },
+  {
+    id: "9",
+    name: "XYZ Industries - NDA v2 (Signed).pdf",
+    type: "pdf",
+    size: "456 KB",
+    folder: "Agreements",
+    uploadedBy: "Sarah Williams",
+    uploadedAt: "2025-01-04",
+    shared: true,
+  },
+  {
+    id: "10",
+    name: "Precision Parts - Consulting Agreement (Rev 3).pdf",
+    type: "pdf",
+    size: "890 KB",
+    folder: "Agreements",
+    uploadedBy: "Brian Stitt",
+    uploadedAt: "2024-12-15",
+    shared: false,
+  },
 ];
 
 const folders = [
@@ -127,6 +157,7 @@ const folders = [
   { name: "Projects", count: 15 },
   { name: "Reports", count: 6 },
   { name: "Marketing", count: 4 },
+  { name: "Agreements", count: 3 },
 ];
 
 function getFileIcon(type: string) {

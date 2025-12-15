@@ -575,6 +575,7 @@ export default function TractionDashboardPage() {
           <div className="border-b px-4">
             <TabsList className="h-10">
               <TabsTrigger value="overview" className="gap-2"><BarChart3 className="h-4 w-4" />Overview</TabsTrigger>
+              <TabsTrigger value="insights" className="gap-2"><Sparkles className="h-4 w-4" />EOS Insights</TabsTrigger>
               <TabsTrigger value="vto" className="gap-2"><Compass className="h-4 w-4" />V/TO</TabsTrigger>
               <TabsTrigger value="rocks" className="gap-2"><Mountain className="h-4 w-4" />Rocks ({rocks.length})</TabsTrigger>
               <TabsTrigger value="scorecard" className="gap-2"><BarChart3 className="h-4 w-4" />Scorecard</TabsTrigger>
@@ -624,6 +625,286 @@ export default function TractionDashboardPage() {
                             <TableCell className="text-right">{metric.unit}{metric.actual.toLocaleString()}</TableCell>
                             <TableCell className="text-center">{getTrendIcon(metric.trend)}</TableCell>
                             <TableCell className="text-center">{metric.actual >= metric.goal ? <CheckCircle className="h-5 w-5 text-green-600 mx-auto" /> : <XCircle className="h-5 w-5 text-red-600 mx-auto" />}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          {/* EOS Insights Tab - Consolidated View */}
+          <TabsContent value="insights" className="flex-1 m-0 min-h-0 overflow-hidden">
+            <ScrollArea className="h-full">
+              <div className="p-6 space-y-6">
+                {/* Summary Stats */}
+                <div className="grid grid-cols-4 gap-4">
+                  <Card className="border-l-4 border-l-red-500">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-muted-foreground uppercase tracking-wide">Off-Track Rocks</p>
+                          <p className="text-3xl font-bold text-red-600">{rocks.filter(r => r.status === "off-track").length}</p>
+                        </div>
+                        <Mountain className="h-8 w-8 text-red-200" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-l-4 border-l-orange-500">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-muted-foreground uppercase tracking-wide">Overdue To-Dos</p>
+                          <p className="text-3xl font-bold text-orange-600">{todos.filter(t => t.status !== "complete" && new Date(t.dueDate) < new Date()).length}</p>
+                        </div>
+                        <ListTodo className="h-8 w-8 text-orange-200" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-l-4 border-l-yellow-500">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-muted-foreground uppercase tracking-wide">Unresolved Issues</p>
+                          <p className="text-3xl font-bold text-yellow-600">{issues.filter(i => i.status !== "solved").length}</p>
+                        </div>
+                        <Flag className="h-8 w-8 text-yellow-200" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-l-4 border-l-purple-500">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-muted-foreground uppercase tracking-wide">Off-Track Measurables</p>
+                          <p className="text-3xl font-bold text-purple-600">{metrics.filter(m => m.actual < m.goal).length}</p>
+                        </div>
+                        <BarChart3 className="h-8 w-8 text-purple-200" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Scorecard Section */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2">
+                        <BarChart3 className="h-5 w-5" />
+                        Scorecard
+                      </CardTitle>
+                      <Button size="sm" onClick={openAddMetric}>
+                        <Plus className="h-4 w-4 mr-1" />Add Metric
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Measurable</TableHead>
+                          <TableHead>Owner</TableHead>
+                          <TableHead className="text-right">Goal</TableHead>
+                          <TableHead className="text-right">Actual</TableHead>
+                          <TableHead className="text-center">Trend</TableHead>
+                          <TableHead className="text-center">Status</TableHead>
+                          <TableHead className="text-right w-[100px]">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {metrics.map(metric => (
+                          <TableRow key={metric.id}>
+                            <TableCell className="font-medium">{metric.name}</TableCell>
+                            <TableCell>{metric.owner}</TableCell>
+                            <TableCell className="text-right">{metric.unit}{metric.goal.toLocaleString()}</TableCell>
+                            <TableCell className={cn("text-right font-medium", metric.actual >= metric.goal ? "text-green-600" : "text-red-600")}>
+                              {metric.unit}{metric.actual.toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-center">{getTrendIcon(metric.trend)}</TableCell>
+                            <TableCell className="text-center">
+                              {metric.actual >= metric.goal ? (
+                                <Badge className="bg-green-100 text-green-700">✓</Badge>
+                              ) : (
+                                <Badge className="bg-red-100 text-red-700">✗</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button variant="ghost" size="icon" onClick={() => openEditMetric(metric)}><Edit className="h-4 w-4" /></Button>
+                              <Button variant="ghost" size="icon" onClick={() => confirmDelete("metric", metric.id, metric.name)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+
+                {/* Rocks Section */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2">
+                        <Mountain className="h-5 w-5" />
+                        Rocks - {currentQuarter}
+                      </CardTitle>
+                      <Button size="sm" onClick={openAddRock}>
+                        <Plus className="h-4 w-4 mr-1" />Add Rock
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[100px]">Status</TableHead>
+                          <TableHead>Rock</TableHead>
+                          <TableHead>Owner</TableHead>
+                          <TableHead className="text-center">Progress</TableHead>
+                          <TableHead>Due Date</TableHead>
+                          <TableHead className="text-right w-[100px]">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {rocks.map(rock => (
+                          <TableRow key={rock.id}>
+                            <TableCell>
+                              <Badge className={cn("w-full justify-center", getStatusColor(rock.status))}>
+                                {getStatusIcon(rock.status)}
+                                <span className="ml-1 capitalize text-xs">{rock.status.replace("-", " ")}</span>
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="font-medium">{rock.description}</TableCell>
+                            <TableCell>{rock.owner}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Progress value={rock.progress} className="h-2 w-20" />
+                                <span className="text-xs text-muted-foreground">{rock.progress}%</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>{new Date(rock.dueDate).toLocaleDateString()}</TableCell>
+                            <TableCell className="text-right">
+                              <Button variant="ghost" size="icon" onClick={() => openEditRock(rock)}><Edit className="h-4 w-4" /></Button>
+                              <Button variant="ghost" size="icon" onClick={() => confirmDelete("rock", rock.id, rock.description.substring(0, 30))}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+
+                {/* Issues Section */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2">
+                        <Flag className="h-5 w-5" />
+                        Issues
+                      </CardTitle>
+                      <Button size="sm" onClick={openAddIssue}>
+                        <Plus className="h-4 w-4 mr-1" />Add Issue
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[80px]">Priority</TableHead>
+                          <TableHead>Issue</TableHead>
+                          <TableHead>Owner</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Created</TableHead>
+                          <TableHead className="text-right w-[120px]">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {issues.map(issue => (
+                          <TableRow key={issue.id}>
+                            <TableCell>
+                              <Badge className={getPriorityColor(issue.priority)}>{issue.priority.toUpperCase()}</Badge>
+                            </TableCell>
+                            <TableCell className="font-medium">{issue.description}</TableCell>
+                            <TableCell>{issue.owner}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="capitalize">{issue.status.replace("-", " ")}</Badge>
+                            </TableCell>
+                            <TableCell>{new Date(issue.identifiedDate).toLocaleDateString()}</TableCell>
+                            <TableCell className="text-right">
+                              <Button variant="ghost" size="icon" onClick={() => openEditIssue(issue)}><Edit className="h-4 w-4" /></Button>
+                              {issue.status !== "solved" && (
+                                <Button variant="ghost" size="icon" className="text-green-600" onClick={() => solveIssue(issue.id)}><CheckCircle className="h-4 w-4" /></Button>
+                              )}
+                              <Button variant="ghost" size="icon" onClick={() => confirmDelete("issue", issue.id, issue.description.substring(0, 30))}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+
+                {/* To-Dos Section */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2">
+                        <ListTodo className="h-5 w-5" />
+                        To-Dos
+                      </CardTitle>
+                      <Button size="sm" onClick={openAddTodo}>
+                        <Plus className="h-4 w-4 mr-1" />Add To-Do
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[40px]"></TableHead>
+                          <TableHead>To-Do</TableHead>
+                          <TableHead>Owner</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Due Date</TableHead>
+                          <TableHead className="text-right w-[100px]">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {todos.map(todo => (
+                          <TableRow key={todo.id} className={todo.status === "complete" ? "opacity-50" : ""}>
+                            <TableCell>
+                              <Checkbox 
+                                checked={todo.status === "complete"} 
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    updateTodoInDb(todo.id, { status: "complete" });
+                                  } else {
+                                    updateTodoInDb(todo.id, { status: "in-progress" });
+                                  }
+                                }}
+                              />
+                            </TableCell>
+                            <TableCell className={cn("font-medium", todo.status === "complete" && "line-through")}>{todo.description}</TableCell>
+                            <TableCell>{todo.owner}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className={cn(
+                                "capitalize",
+                                todo.status === "complete" && "bg-green-100 text-green-700",
+                                todo.status === "in-progress" && "bg-blue-100 text-blue-700",
+                                new Date(todo.dueDate) < new Date() && todo.status !== "complete" && "bg-red-100 text-red-700"
+                              )}>
+                                {new Date(todo.dueDate) < new Date() && todo.status !== "complete" ? "Overdue" : todo.status.replace("-", " ")}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className={cn(new Date(todo.dueDate) < new Date() && todo.status !== "complete" && "text-red-600 font-medium")}>
+                              {new Date(todo.dueDate).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button variant="ghost" size="icon" onClick={() => openEditTodo(todo)}><Edit className="h-4 w-4" /></Button>
+                              <Button variant="ghost" size="icon" onClick={() => confirmDelete("todo", todo.id, todo.description.substring(0, 30))}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
