@@ -40,6 +40,7 @@ import {
   Building,
   FileText,
   Calendar,
+  CalendarDays,
   CheckSquare,
   MessageSquare,
   Bell,
@@ -117,6 +118,11 @@ const workItems = [
     title: "Calendar",
     href: "/portal/calendar",
     icon: Calendar,
+  },
+  {
+    title: "Availability",
+    href: "/portal/availability",
+    icon: CalendarDays,
   },
   {
     title: "Meetings",
