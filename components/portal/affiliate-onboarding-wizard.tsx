@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useUserProfile } from "@/contexts/user-profile-context";
+import { db } from "@/lib/firebase";
+import { collection, addDoc, Timestamp, doc, setDoc } from "firebase/firestore";
 import {
   Dialog,
   DialogContent,
@@ -32,6 +34,7 @@ import {
   Star,
   Lightbulb,
   Award,
+  Loader2,
 } from "lucide-react";
 
 // Circular progress component
@@ -166,17 +169,79 @@ export function AffiliateOnboardingWizard() {
     }
   };
 
-  const handleComplete = () => {
-    updateProfile({
-      affiliateOnboardingComplete: true,
-      networkingProfile: {
-        ...profile.networkingProfile,
-        categories: selectedCategories,
-        expertise: expertise.split(",").map((e) => e.trim()).filter((e) => e),
-        ...networkingData,
-      },
-    });
-    setShowAffiliateOnboarding(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleComplete = async () => {
+    setIsSaving(true);
+    
+    try {
+      // Create Team Member document in Firebase
+      const teamMemberData = {
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        emailPrimary: profile.email,
+        mobile: profile.phone || "",
+        expertise: expertise,
+        title: profile.jobTitle || "",
+        company: profile.company || "",
+        location: profile.location || "",
+        bio: profile.bio || "",
+        avatar: profile.avatarUrl || "",
+        linkedIn: "",
+        website: "",
+        role: "affiliate" as const,
+        status: "active" as const,
+        // Networking profile data
+        networkingProfile: {
+          categories: selectedCategories,
+          expertise: expertise.split(",").map((e) => e.trim()).filter((e) => e),
+          ...networkingData,
+        },
+        affiliateOnboardingComplete: true,
+        affiliateAgreementSigned: true,
+        affiliateAgreementDate: new Date().toISOString(),
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      };
+
+      // Save to Firebase team_members collection
+      if (!db) {
+        throw new Error("Firebase not initialized");
+      }
+      const teamMembersRef = collection(db, "team_members");
+      const docRef = await addDoc(teamMembersRef, teamMemberData);
+      
+      console.log("Team Member created with ID:", docRef.id);
+
+      // Update local profile state
+      updateProfile({
+        id: docRef.id,
+        affiliateOnboardingComplete: true,
+        networkingProfile: {
+          ...profile.networkingProfile,
+          categories: selectedCategories,
+          expertise: expertise.split(",").map((e) => e.trim()).filter((e) => e),
+          ...networkingData,
+        },
+      });
+      
+      setShowAffiliateOnboarding(false);
+    } catch (error) {
+      console.error("Error saving affiliate data to Firebase:", error);
+      // Still update local state even if Firebase fails
+      updateProfile({
+        affiliateOnboardingComplete: true,
+        networkingProfile: {
+          ...profile.networkingProfile,
+          categories: selectedCategories,
+          expertise: expertise.split(",").map((e) => e.trim()).filter((e) => e),
+          ...networkingData,
+        },
+      });
+      setShowAffiliateOnboarding(false);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const isStepValid = () => {
@@ -507,9 +572,18 @@ export function AffiliateOnboardingWizard() {
                 <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             ) : (
-              <Button onClick={handleComplete} className="bg-green-600 hover:bg-green-700">
-                <CheckCircle className="h-4 w-4 mr-2" />
-                Complete Onboarding
+              <Button onClick={handleComplete} className="bg-green-600 hover:bg-green-700" disabled={isSaving}>
+                {isSaving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Complete Onboarding
+                  </>
+                )}
               </Button>
             )}
           </div>
