@@ -190,7 +190,7 @@ export function Navbar() {
         {/* CTA Buttons */}
         <div className="hidden lg:flex items-center gap-3">
           <Button variant="ghost" asChild>
-            <Link href="/portal">Sign In</Link>
+            <Link href="/sign-in">Sign In</Link>
           </Button>
           <Button asChild>
             <Link href="/contact">Get Assessment</Link>
@@ -265,7 +265,7 @@ export function Navbar() {
 
               <div className="border-t pt-4 space-y-2">
                 <Button variant="outline" className="w-full" asChild>
-                  <Link href="/portal" onClick={() => setMobileOpen(false)}>
+                  <Link href="/sign-in" onClick={() => setMobileOpen(false)}>
                     Sign In
                   </Link>
                 </Button>
