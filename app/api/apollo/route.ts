@@ -237,13 +237,67 @@ export async function POST(request: NextRequest) {
           email.includes("@domain.com") ||
           email === "email@domain.com";
 
-        // Primary approach: Use people/match with name and company (most reliable)
+        // Helper to extract email from person object
+        const extractEmail = (person: Record<string, unknown>): string | null => {
+          // Check primary email
+          if (person.email && !isPlaceholder(person.email as string)) {
+            return person.email as string;
+          }
+          // Check personal_emails array
+          const personalEmails = person.personal_emails as string[] | undefined;
+          if (personalEmails?.length) {
+            const validEmail = personalEmails.find((e: string) => !isPlaceholder(e));
+            if (validEmail) return validEmail;
+          }
+          // Check work email
+          if (person.work_email && !isPlaceholder(person.work_email as string)) {
+            return person.work_email as string;
+          }
+          // Check contact email
+          if (person.contact_email && !isPlaceholder(person.contact_email as string)) {
+            return person.contact_email as string;
+          }
+          return null;
+        };
+
+        // Try Apollo's people/enrich endpoint first (uses credits but reveals data)
+        if (personId) {
+          try {
+            const enrichResponse = await fetch(`${APOLLO_API_BASE}/people/enrich`, {
+              method: "POST",
+              headers,
+              body: JSON.stringify({
+                id: personId,
+                reveal_personal_emails: true,
+              }),
+            });
+
+            const enrichData = await enrichResponse.json();
+            console.log("Apollo enrich response:", JSON.stringify(enrichData, null, 2));
+
+            if (enrichResponse.ok && enrichData.person) {
+              const email = extractEmail(enrichData.person);
+              if (email) {
+                return NextResponse.json({
+                  connected: true,
+                  email,
+                  person: enrichData.person,
+                });
+              }
+            }
+          } catch (err) {
+            console.log("Enrich endpoint failed, trying match endpoint");
+          }
+        }
+
+        // Primary approach: Use people/match with name and company
         if (firstName && lastName && company) {
           const matchBody: Record<string, unknown> = {
             first_name: firstName,
             last_name: lastName,
             organization_name: company,
             reveal_personal_emails: true,
+            reveal_phone_number: true,
           };
           
           // Add LinkedIn if available for better matching
@@ -258,39 +312,20 @@ export async function POST(request: NextRequest) {
           });
 
           const data = await response.json();
-          console.log("Apollo reveal_email response:", JSON.stringify(data, null, 2));
+          console.log("Apollo reveal_email match response:", JSON.stringify(data, null, 2));
 
           if (response.ok && data.person) {
-            // Check multiple email fields - Apollo stores emails in different places
-            const person = data.person;
-            let email = null;
-            
-            // Check primary email
-            if (person.email && !isPlaceholder(person.email)) {
-              email = person.email;
-            }
-            // Check personal_emails array
-            else if (person.personal_emails?.length > 0) {
-              email = person.personal_emails.find((e: string) => !isPlaceholder(e)) || null;
-            }
-            // Check work email
-            else if (person.work_email && !isPlaceholder(person.work_email)) {
-              email = person.work_email;
-            }
-            // Check organization email
-            else if (person.organization?.primary_email && !isPlaceholder(person.organization.primary_email)) {
-              email = person.organization.primary_email;
-            }
+            const email = extractEmail(data.person);
             
             return NextResponse.json({
               connected: true,
               email,
-              person,
+              person: data.person,
               debug: { 
-                hasEmail: !!person.email, 
-                hasPersonalEmails: person.personal_emails?.length > 0,
-                emailValue: person.email,
-                personalEmails: person.personal_emails,
+                hasEmail: !!data.person.email, 
+                hasPersonalEmails: data.person.personal_emails?.length > 0,
+                emailValue: data.person.email,
+                personalEmails: data.person.personal_emails,
               }
             });
           }
@@ -310,61 +345,18 @@ export async function POST(request: NextRequest) {
           const linkedInData = await linkedInResponse.json();
 
           if (linkedInResponse.ok && linkedInData.person) {
-            const person = linkedInData.person;
-            let email = null;
-            
-            if (person.email && !isPlaceholder(person.email)) {
-              email = person.email;
-            } else if (person.personal_emails?.length > 0) {
-              email = person.personal_emails.find((e: string) => !isPlaceholder(e)) || null;
-            }
+            const email = extractEmail(linkedInData.person);
             
             return NextResponse.json({
               connected: true,
               email,
-              person,
-            });
-          }
-        }
-
-        // Last resort: Try bulk_match with Apollo ID
-        if (personId) {
-          const bulkResponse = await fetch(`${APOLLO_API_BASE}/people/bulk_match`, {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
-              reveal_personal_emails: true,
-              details: [{ 
-                id: personId,
-                ...(firstName && { first_name: firstName }),
-                ...(lastName && { last_name: lastName }),
-                ...(company && { organization_name: company }),
-              }],
-            }),
-          });
-
-          const bulkData = await bulkResponse.json();
-
-          if (bulkResponse.ok && bulkData.matches?.[0]) {
-            const person = bulkData.matches[0];
-            let email = null;
-            
-            if (person.email && !isPlaceholder(person.email)) {
-              email = person.email;
-            } else if (person.personal_emails?.length > 0) {
-              email = person.personal_emails.find((e: string) => !isPlaceholder(e)) || null;
-            }
-            
-            return NextResponse.json({
-              connected: true,
-              email,
-              person,
+              person: linkedInData.person,
             });
           }
         }
         
         return NextResponse.json(
-          { connected: false, error: "Could not reveal email - insufficient identifying information or email not available in Apollo", email: null },
+          { connected: true, error: "Email not available in Apollo for this contact", email: null },
           { status: 200 }
         );
       }
@@ -394,13 +386,44 @@ export async function POST(request: NextRequest) {
           return null;
         };
 
-        // Primary approach: Use people/match with name and company (most reliable)
+        // Try Apollo's people/enrich endpoint first (uses credits but reveals data)
+        if (personId) {
+          try {
+            const enrichResponse = await fetch(`${APOLLO_API_BASE}/people/enrich`, {
+              method: "POST",
+              headers,
+              body: JSON.stringify({
+                id: personId,
+                reveal_phone_number: true,
+              }),
+            });
+
+            const enrichData = await enrichResponse.json();
+            console.log("Apollo phone enrich response:", JSON.stringify(enrichData, null, 2));
+
+            if (enrichResponse.ok && enrichData.person) {
+              const phone = extractPhone(enrichData.person);
+              if (phone) {
+                return NextResponse.json({
+                  connected: true,
+                  phone,
+                  person: enrichData.person,
+                });
+              }
+            }
+          } catch (err) {
+            console.log("Enrich endpoint failed, trying match endpoint");
+          }
+        }
+
+        // Primary approach: Use people/match with name and company
         if (firstName && lastName && company) {
           const matchBody: Record<string, unknown> = {
             first_name: firstName,
             last_name: lastName,
             organization_name: company,
             reveal_phone_number: true,
+            reveal_personal_emails: true,
           };
           
           // Add LinkedIn if available for better matching
@@ -415,7 +438,7 @@ export async function POST(request: NextRequest) {
           });
 
           const data = await response.json();
-          console.log("Apollo reveal_phone response:", JSON.stringify(data, null, 2));
+          console.log("Apollo reveal_phone match response:", JSON.stringify(data, null, 2));
 
           if (response.ok && data.person) {
             const phone = extractPhone(data.person);
@@ -456,38 +479,9 @@ export async function POST(request: NextRequest) {
             });
           }
         }
-
-        // Last resort: Try bulk_match with Apollo ID
-        if (personId) {
-          const bulkResponse = await fetch(`${APOLLO_API_BASE}/people/bulk_match`, {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
-              reveal_phone_number: true,
-              details: [{ 
-                id: personId,
-                ...(firstName && { first_name: firstName }),
-                ...(lastName && { last_name: lastName }),
-                ...(company && { organization_name: company }),
-              }],
-            }),
-          });
-
-          const bulkData = await bulkResponse.json();
-
-          if (bulkResponse.ok && bulkData.matches?.[0]) {
-            const phone = extractPhone(bulkData.matches[0]);
-            
-            return NextResponse.json({
-              connected: true,
-              phone,
-              person: bulkData.matches[0],
-            });
-          }
-        }
         
         return NextResponse.json(
-          { connected: false, error: "Could not reveal phone - insufficient identifying information or phone not available in Apollo", phone: null },
+          { connected: true, error: "Phone not available in Apollo for this contact", phone: null },
           { status: 200 }
         );
       }
