@@ -384,6 +384,7 @@ export default function ApolloSearchPage() {
   const [newListName, setNewListName] = useState("");
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
   const [addingToList, setAddingToList] = useState(false);
+  const [savedListSearchQuery, setSavedListSearchQuery] = useState("");
 
   // Check if a contact exists in any saved list (by name and company)
   const findContactInSavedLists = (name: string, company: string): { listName: string; email?: string; phone?: string } | null => {
@@ -2084,15 +2085,35 @@ export default function ApolloSearchPage() {
                     </div>
                   ) : (
                     <>
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-4 mb-4">
                         <h3 className="font-medium">
                           {savedLists.length} Saved List{savedLists.length !== 1 ? "s" : ""}
                         </h3>
+                        <div className="flex-1 max-w-md">
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              placeholder="Search by name or company..."
+                              value={savedListSearchQuery}
+                              onChange={(e) => setSavedListSearchQuery(e.target.value)}
+                              className="pl-9"
+                            />
+                          </div>
+                        </div>
                       </div>
                       
                       {savedLists.map((list) => {
-                        // Group contacts by company, then sort by title within each company
-                        const contactsByCompany = (list.contacts || []).reduce((acc, contact) => {
+                        // Filter contacts based on search query
+                        const searchLower = savedListSearchQuery.toLowerCase().trim();
+                        const filteredContacts = (list.contacts || []).filter((contact) => {
+                          if (!searchLower) return true;
+                          const nameMatch = contact.name?.toLowerCase().includes(searchLower);
+                          const companyMatch = contact.company?.toLowerCase().includes(searchLower);
+                          return nameMatch || companyMatch;
+                        });
+                        
+                        // Group filtered contacts by company, then sort by title within each company
+                        const contactsByCompany = filteredContacts.reduce((acc, contact) => {
                           const company = contact.company || "Unknown Company";
                           if (!acc[company]) acc[company] = [];
                           acc[company].push(contact);
@@ -2106,6 +2127,11 @@ export default function ApolloSearchPage() {
                           );
                         });
                         
+                        // Skip lists with no matching contacts when searching
+                        if (searchLower && filteredContacts.length === 0) {
+                          return null;
+                        }
+                        
                         return (
                           <Card key={list.id}>
                             <CardHeader className="pb-2">
@@ -2116,7 +2142,7 @@ export default function ApolloSearchPage() {
                                 </CardTitle>
                                 <div className="flex items-center gap-2">
                                   <Badge variant="secondary">
-                                    {list.contacts?.length || 0} contacts
+                                    {searchLower ? `${filteredContacts.length} of ${list.contacts?.length || 0}` : `${list.contacts?.length || 0}`} contacts
                                   </Badge>
                                   <Button
                                     variant="outline"
@@ -2265,6 +2291,33 @@ export default function ApolloSearchPage() {
                           </Card>
                         );
                       })}
+                      
+                      {/* Show message when search returns no results */}
+                      {savedListSearchQuery.trim() && savedLists.every((list) => {
+                        const searchLower = savedListSearchQuery.toLowerCase().trim();
+                        const filteredContacts = (list.contacts || []).filter((contact) => {
+                          const nameMatch = contact.name?.toLowerCase().includes(searchLower);
+                          const companyMatch = contact.company?.toLowerCase().includes(searchLower);
+                          return nameMatch || companyMatch;
+                        });
+                        return filteredContacts.length === 0;
+                      }) && (
+                        <div className="text-center py-8">
+                          <Search className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+                          <h3 className="text-base font-medium">No contacts found</h3>
+                          <p className="text-sm text-muted-foreground">
+                            No contacts match &quot;{savedListSearchQuery}&quot;
+                          </p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-3"
+                            onClick={() => setSavedListSearchQuery("")}
+                          >
+                            Clear search
+                          </Button>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
