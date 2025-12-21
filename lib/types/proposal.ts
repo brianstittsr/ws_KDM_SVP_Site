@@ -7,7 +7,7 @@
 // PROPOSAL TYPES
 // ============================================
 
-export type ProposalType = 'grant' | 'nda' | 'rfp_response' | 'rfi_response' | 'contract' | 'agreement' | 'mou';
+export type ProposalType = 'grant' | 'nda' | 'rfp_response' | 'rfi_response' | 'contract' | 'agreement' | 'mou' | 'oem_supplier_readiness';
 export type ProposalStatus = 'draft' | 'pending_signature' | 'active' | 'inactive' | 'completed';
 export type SignatureStatus = 'not_sent' | 'pending' | 'partially_signed' | 'completed' | 'declined';
 
@@ -40,10 +40,275 @@ export interface Proposal {
   updatedAt: Date;
   
   // Digital Signature Integration
-  docuSealSubmissionId?: string;
+  signatureSubmissionId?: string;
   signatureStatus?: SignatureStatus;
   signedDocumentUrl?: string;
   signedAt?: Date;
+  
+  // Submission Tracking
+  submittedAt?: Date;
+  submittedBy?: string;
+  submittedByName?: string;
+  linkedProjectId?: string;
+  
+  // RFI/RFP Specific Fields
+  responseDeadline?: string;
+  deliverables?: ProposalDeliverable[];
+  reportingRequirements?: ReportingRequirement[];
+  sections?: ProposalSection[];
+  
+  // Grant Specific Fields
+  grantAmount?: number;
+  grantAmountAwarded?: number;
+  grantingOrganization?: string;
+  grantProgramName?: string;
+  matchingFundsRequired?: boolean;
+  matchingFundsAmount?: number;
+  grantStatus?: 'applied' | 'under_review' | 'awarded' | 'declined' | 'completed';
+  
+  // OEM Supplier Readiness Fields
+  supplierId?: string;
+  supplierName?: string;
+  targetOEM?: string;
+  oemAgreementId?: string;
+  researchWebsites?: ResearchWebsite[];
+  researchDocuments?: ResearchDocument[];
+  deepResearchResult?: DeepResearchResult;
+  certificationAnalysis?: CertificationAnalysis;
+  opportunityMatrix?: OpportunityMatrix;
+  affiliateRecommendations?: AffiliateRecommendation[];
+  slideDeck?: SlideDeck;
+  automatedCommunications?: AutomatedCommunication[];
+}
+
+// ============================================
+// RFI/RFP DELIVERABLES & SECTIONS
+// ============================================
+
+export interface ProposalDeliverable {
+  id: string;
+  name: string;
+  description: string;
+  dueDate?: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'submitted';
+  responseText?: string;
+  attachments?: string[];
+}
+
+export interface ReportingRequirement {
+  id: string;
+  name: string;
+  frequency: string;
+  description: string;
+  format?: string;
+  responsibleParty?: string;
+}
+
+export interface ProposalSection {
+  id: string;
+  title: string;
+  order: number;
+  content: string;
+  isEditable: boolean;
+  responseRequired: boolean;
+  responseText?: string;
+}
+
+// ============================================
+// OEM SUPPLIER READINESS TYPES
+// ============================================
+
+export interface ResearchWebsite {
+  id: string;
+  url: string;
+  status: 'pending' | 'crawling' | 'crawled' | 'error';
+  crawledAt?: string;
+  pagesCrawled?: number;
+  extractedData?: WebsiteCrawlResult;
+}
+
+export interface WebsiteCrawlResult {
+  companyName: string;
+  description: string;
+  capabilities: string[];
+  certifications: string[];
+  locations: string[];
+  keyContacts: { name: string; title: string; email?: string }[];
+  industries: string[];
+  products: string[];
+  services: string[];
+  rawContent: string;
+}
+
+export interface ResearchDocument {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  uploadedAt: string;
+  analyzed: boolean;
+  extractedData?: DocumentAnalysisResult;
+}
+
+export interface DeepResearchResult {
+  companyProfile: CompanyProfile;
+  capabilities: CapabilityAssessment;
+  certifications: CertificationStatus[];
+  opportunities: Opportunity[];
+  gaps: GapAnalysis;
+  recommendations: string[];
+  sources: { type: 'website' | 'document' | 'internet'; name: string; url?: string }[];
+}
+
+export interface CompanyProfile {
+  name: string;
+  headquarters: string;
+  founded?: string;
+  employees?: string;
+  revenue?: string;
+  description: string;
+  ownership?: string;
+  certifications: string[];
+  industries: string[];
+  locations: { name: string; address: string; type: string }[];
+  keyContacts: { name: string; title: string; email?: string; phone?: string }[];
+}
+
+export interface CapabilityAssessment {
+  primaryCapabilities: Capability[];
+  secondaryCapabilities: Capability[];
+  equipmentAndFacilities: string[];
+  technologyStack: string[];
+  qualityMetrics: { metric: string; value: string }[];
+}
+
+export interface Capability {
+  name: string;
+  description: string;
+  relevanceScore: number;
+  evidence: string[];
+}
+
+export interface CertificationAnalysis {
+  current: CertificationStatus[];
+  required: CertificationStatus[];
+  gaps: CertificationGap[];
+  timeline: { certification: string; estimatedMonths: number; estimatedCost: string }[];
+}
+
+export interface CertificationStatus {
+  name: string;
+  status: 'has' | 'required' | 'recommended' | 'not_applicable';
+  description: string;
+  applicability: string;
+  expirationDate?: string;
+}
+
+export interface CertificationGap {
+  certification: string;
+  currentStatus: string;
+  requiredStatus: string;
+  priority: 'critical' | 'high' | 'medium' | 'low';
+  estimatedCost: string;
+  estimatedTimeline: string;
+  remediation: string;
+}
+
+export interface OpportunityMatrix {
+  opportunities: Opportunity[];
+  totalEstimatedValue: { low: number; high: number };
+  readinessScore: number;
+}
+
+export interface Opportunity {
+  id: string;
+  name: string;
+  description: string;
+  estimatedAnnualValue: { low: number; high: number };
+  readiness: 'ready' | 'needs_certification' | 'needs_development' | 'not_applicable';
+  requirements: string[];
+  timeline: string;
+}
+
+export interface GapAnalysis {
+  certificationGaps: CertificationGap[];
+  capabilityGaps: { capability: string; gap: string; remediation: string }[];
+  documentationGaps: { document: string; status: string; priority: string }[];
+  systemGaps: { system: string; gap: string; recommendation: string }[];
+}
+
+export interface AffiliateRecommendation {
+  id: string;
+  affiliateName: string;
+  affiliateId?: string;
+  deliverable: string;
+  capability: string;
+  rationale: string;
+  estimatedCost?: string;
+  contactInfo?: string;
+}
+
+export interface SlideDeck {
+  id: string;
+  title: string;
+  subtitle?: string;
+  slides: Slide[];
+  branding: {
+    primaryColor: string;
+    accentColor: string;
+    logo?: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Slide {
+  id: string;
+  type: 'title' | 'content' | 'two-column' | 'chart' | 'table' | 'image' | 'quote' | 'insight';
+  title: string;
+  content?: string;
+  bullets?: string[];
+  insight?: string;
+  insightHighlight?: string;
+  notes?: string;
+  order: number;
+}
+
+export interface AutomatedCommunication {
+  id: string;
+  type: 'milestone_update' | 'deadline_reminder' | 'status_change' | 'document_request';
+  recipientType: 'supplier' | 'oem' | 'internal';
+  recipientEmail?: string;
+  subject: string;
+  body: string;
+  scheduledAt?: string;
+  sentAt?: string;
+  status: 'scheduled' | 'sent' | 'failed';
+  linkedMilestoneId?: string;
+}
+
+// ============================================
+// DOCUMENT TEMPLATES
+// ============================================
+
+export type TemplateType = 'nda' | 'mou' | 'contract' | 'agreement';
+
+export interface DocumentTemplate {
+  id: string;
+  name: string;
+  type: TemplateType;
+  description?: string;
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  uploadedAt: string;
+  uploadedBy?: string;
+  version: string;
+  isActive: boolean;
+  tags?: string[];
+  content?: string; // Template content with {{placeholder}} patterns
+  placeholders?: string[]; // Extracted placeholders from content
+  storageUrl?: string; // URL to the template file in storage
 }
 
 // ============================================
@@ -69,7 +334,7 @@ export interface Agreement {
   linkedProposalId?: string;
   
   // Digital Signature
-  docuSealSubmissionId?: string;
+  signatureSubmissionId?: string;
   signatureStatus: SignatureStatus;
   signers: Signer[];
   
@@ -353,6 +618,120 @@ export interface TableConfig {
 }
 
 // ============================================
+// NDA DOCUMENT TYPES
+// ============================================
+
+export type NDAStatus = 'draft' | 'pending_signature' | 'pending_countersign' | 'completed' | 'archived' | 'expired';
+export type NDATemplateType = 'mutual' | 'unilateral' | 'employee' | 'contractor' | 'vendor' | 'custom';
+
+export interface NDATemplate {
+  id: string;
+  name: string;
+  type: NDATemplateType;
+  description: string;
+  sections: NDASection[];
+  createdAt: Date;
+  updatedAt: Date;
+  isDefault?: boolean;
+  tags: string[];
+}
+
+export interface NDASection {
+  id: string;
+  title: string;
+  content: string;
+  order: number;
+  isEditable: boolean;
+  isRequired: boolean;
+  placeholders?: NDAPlaceholder[];
+}
+
+export interface NDAPlaceholder {
+  id: string;
+  key: string;
+  label: string;
+  type: 'text' | 'date' | 'name' | 'company' | 'address' | 'email';
+  required: boolean;
+  defaultValue?: string;
+}
+
+export interface NDADocument {
+  id: string;
+  templateId: string;
+  templateName: string;
+  name: string;
+  status: NDAStatus;
+  
+  // Parties
+  disclosingParty: NDAParty;
+  receivingParty: NDAParty;
+  
+  // Content
+  sections: NDASection[];
+  effectiveDate: string;
+  expirationDate?: string;
+  
+  // Signature tracking
+  signerSignature?: NDASignature;
+  countersignature?: NDASignature;
+  
+  // Document URLs
+  draftUrl?: string;
+  signedUrl?: string;
+  finalPdfUrl?: string;
+  
+  // Sharing
+  publicAccessToken?: string;
+  publicSigningUrl?: string;
+  
+  // Metadata
+  createdAt: Date;
+  updatedAt: Date;
+  sentAt?: Date;
+  signedAt?: Date;
+  countersignedAt?: Date;
+  archivedAt?: Date;
+  
+  // Notes
+  internalNotes?: string;
+}
+
+export interface NDAParty {
+  name: string;
+  title?: string;
+  company: string;
+  email: string;
+  address?: string;
+  phone?: string;
+}
+
+export interface NDASignature {
+  signedBy: string;
+  signedAt: Date;
+  ipAddress?: string;
+  signatureImage?: string;
+  timestamp: string;
+}
+
+export const NDA_TEMPLATE_TYPES: { value: NDATemplateType; label: string }[] = [
+  { value: 'mutual', label: 'Mutual NDA' },
+  { value: 'unilateral', label: 'Unilateral NDA' },
+  { value: 'employee', label: 'Employee NDA' },
+  { value: 'contractor', label: 'Contractor NDA' },
+  { value: 'vendor', label: 'Vendor NDA' },
+  { value: 'custom', label: 'Custom NDA' },
+];
+
+export const NDA_STATUSES: { value: NDAStatus; label: string; color: string }[] = [
+  { value: 'draft', label: 'Draft', color: 'gray' },
+  { value: 'pending_signature', label: 'Pending Signature', color: 'yellow' },
+  { value: 'pending_countersign', label: 'Pending Countersign', color: 'orange' },
+  { value: 'completed', label: 'Completed', color: 'green' },
+  { value: 'archived', label: 'Archived', color: 'blue' },
+  { value: 'expired', label: 'Expired', color: 'red' },
+];
+
+// ============================================
 // WIZARD STATE
 // ============================================
 
@@ -384,6 +763,7 @@ export const PROPOSAL_TYPES: { value: ProposalType; label: string }[] = [
   { value: 'contract', label: 'Contract' },
   { value: 'agreement', label: 'Agreement' },
   { value: 'mou', label: 'Memorandum of Understanding' },
+  { value: 'oem_supplier_readiness', label: 'OEM Supplier Readiness' },
 ];
 
 export const AGREEMENT_TYPES: { value: AgreementType; label: string }[] = [

@@ -114,6 +114,8 @@ export interface TractionScorecardMetricDoc {
   unit?: string; // $, %, #, etc.
   weekNumber?: number;
   year?: number;
+  // Linkages to other EOS components
+  linkedRockIds?: string[]; // Rocks that affect this metric
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -121,6 +123,7 @@ export interface TractionScorecardMetricDoc {
 /** Traction Issue document in Firestore (IDS: Identify, Discuss, Solve) */
 export interface TractionIssueDoc {
   id: string;
+  title: string; // Short title for the issue
   description: string;
   priority: "high" | "medium" | "low";
   identifiedDate: Timestamp;
@@ -128,6 +131,10 @@ export interface TractionIssueDoc {
   ownerName: string; // Denormalized for display
   status: "open" | "in-progress" | "solved";
   solvedDate?: Timestamp;
+  // Linkages to other EOS components
+  linkedRockId?: string; // Rock this issue is blocking or related to
+  linkedTodoIds?: string[]; // Todos created to solve this issue
+  meetingId?: string; // Meeting where this issue was identified
   notes?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -136,12 +143,16 @@ export interface TractionIssueDoc {
 /** Traction To-Do document in Firestore */
 export interface TractionTodoDoc {
   id: string;
+  title: string; // Short title for the todo
   description: string;
   ownerId: string; // Reference to team member
   ownerName: string; // Denormalized for display
   dueDate: Timestamp;
   status: "not-started" | "in-progress" | "complete";
   completedDate?: Timestamp;
+  // Linkages to other EOS components
+  linkedRockId?: string; // Rock this todo supports
+  linkedIssueId?: string; // Issue this todo helps solve
   meetingId?: string; // Reference to meeting where created
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -150,6 +161,7 @@ export interface TractionTodoDoc {
 /** Traction Level 10 Meeting document in Firestore */
 export interface TractionMeetingDoc {
   id: string;
+  title?: string; // Optional meeting title
   date: Timestamp;
   startTime: string;
   endTime: string;
@@ -160,6 +172,10 @@ export interface TractionMeetingDoc {
   rocksReviewed: boolean;
   scorecardReviewed: boolean;
   todoCompletionRate: number; // 0-100
+  // Linkages to other EOS components
+  reviewedRockIds?: string[]; // Rocks reviewed in this meeting
+  solvedIssueIds?: string[]; // Issues solved in this meeting
+  createdTodoIds?: string[]; // Todos created in this meeting
   notes?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -185,13 +201,25 @@ export interface TractionTeamMemberDoc {
 /** Traction Rock document (quarterly priorities) */
 export interface TractionRockDoc {
   id: string;
-  description: string;
+  title: string; // Short title for the rock
+  description: string; // Detailed description
   ownerId: string; // Reference to team member
   ownerName: string; // Denormalized for display
   dueDate: Timestamp;
   status: "on-track" | "at-risk" | "off-track" | "complete";
   progress: number; // 0-100
   quarter: string; // e.g., "Q1 2025"
+  // Milestones for tracking progress
+  milestones?: Array<{
+    id: string;
+    title: string;
+    completed: boolean;
+    completedAt?: Timestamp;
+  }>;
+  // Linkages to other EOS components
+  linkedIssueIds?: string[]; // Issues related to this rock
+  linkedTodoIds?: string[]; // Todos created from this rock
+  linkedMetricIds?: string[]; // Metrics this rock affects
   notes?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
@@ -559,6 +587,11 @@ export interface TeamMemberDoc {
   website?: string;
   role: "admin" | "team" | "affiliate" | "consultant";
   status: "active" | "inactive" | "pending";
+  // Leadership role flags for About/Leadership pages
+  isCEO?: boolean;
+  isCOO?: boolean;
+  isCTO?: boolean;
+  isCRO?: boolean;
   // Additional flags - Affiliates/Suppliers can also be Clients
   isClient?: boolean; // Can this affiliate/team member also be served as a client?
   clientSince?: Timestamp; // When they became a client
@@ -569,9 +602,183 @@ export interface TeamMemberDoc {
   updatedAt: Timestamp;
 }
 
+/** Book a Call Lead document in Firestore */
+export interface BookCallLeadDoc {
+  id: string;
+  // Contact Information
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  company?: string;
+  jobTitle?: string;
+  // Scheduling
+  preferredDate?: string;
+  preferredTime?: string;
+  timezone?: string;
+  // Additional Info
+  message?: string;
+  source: "contact-page" | "cta" | "popup" | "other";
+  // Status
+  status: "new" | "contacted" | "scheduled" | "completed" | "cancelled";
+  assignedTo?: string;
+  assignedToName?: string;
+  // Follow-up
+  notes?: string;
+  scheduledCallDate?: Timestamp;
+  completedAt?: Timestamp;
+  // Metadata
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// ============================================================================
+// NDA Management Types
+// ============================================================================
+
+export type NDAStatusType = 'draft' | 'pending_signature' | 'pending_countersign' | 'completed' | 'archived' | 'expired';
+export type NDATemplateTypeValue = 'mutual' | 'unilateral' | 'employee' | 'contractor' | 'vendor' | 'custom';
+
+/** NDA Template document in Firestore */
+export interface NDATemplateDoc {
+  id: string;
+  name: string;
+  type: NDATemplateTypeValue;
+  description: string;
+  sections: Array<{
+    id: string;
+    title: string;
+    content: string;
+    order: number;
+    isEditable: boolean;
+    isRequired: boolean;
+    placeholders?: Array<{
+      id: string;
+      key: string;
+      label: string;
+      type: 'text' | 'date' | 'name' | 'company' | 'address' | 'email';
+      required: boolean;
+      defaultValue?: string;
+    }>;
+  }>;
+  isDefault?: boolean;
+  tags: string[];
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+/** NDA Party information */
+export interface NDAPartyInfo {
+  name: string;
+  title?: string;
+  company: string;
+  email: string;
+  address?: string;
+  phone?: string;
+}
+
+/** NDA Signature information */
+export interface NDASignatureInfo {
+  signedBy: string;
+  signedAt: Timestamp;
+  ipAddress?: string;
+  signatureImage?: string;
+  timestamp: string;
+}
+
+/** NDA Document in Firestore */
+export interface NDADocumentDoc {
+  id: string;
+  templateId: string;
+  templateName: string;
+  name: string;
+  status: NDAStatusType;
+  
+  // Parties
+  disclosingParty: NDAPartyInfo;
+  receivingParty: NDAPartyInfo;
+  
+  // Content
+  sections: Array<{
+    id: string;
+    title: string;
+    content: string;
+    order: number;
+    isEditable: boolean;
+    isRequired: boolean;
+  }>;
+  effectiveDate: string;
+  expirationDate?: string;
+  
+  // Signature tracking
+  signerSignature?: NDASignatureInfo;
+  countersignature?: NDASignatureInfo;
+  
+  // Document URLs
+  draftUrl?: string;
+  signedUrl?: string;
+  finalPdfUrl?: string;
+  
+  // Sharing
+  publicAccessToken?: string;
+  publicSigningUrl?: string;
+  
+  // Metadata
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  sentAt?: Timestamp;
+  signedAt?: Timestamp;
+  countersignedAt?: Timestamp;
+  archivedAt?: Timestamp;
+  
+  // Notes
+  internalNotes?: string;
+}
+
+/** Event document in Firestore */
+export interface EventDoc {
+  id: string;
+  title: string;
+  description?: string;
+  shortDescription?: string;
+  // Date/Time
+  startDate: Timestamp;
+  endDate?: Timestamp;
+  timezone?: string;
+  isAllDay?: boolean;
+  // Location
+  locationType: "virtual" | "in-person" | "hybrid";
+  location?: string;
+  virtualLink?: string;
+  // Registration
+  registrationUrl?: string;
+  registrationDeadline?: Timestamp;
+  maxAttendees?: number;
+  currentAttendees?: number;
+  // Display
+  imageUrl?: string;
+  category?: "webinar" | "workshop" | "conference" | "networking" | "training" | "other";
+  tags?: string[];
+  // Status
+  status: "draft" | "published" | "cancelled" | "completed";
+  isFeatured?: boolean;
+  // Metadata
+  createdBy?: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
 /** Platform Settings document in Firestore */
 export interface PlatformSettingsDoc {
   id: string;
+  // Social Links Configuration
+  socialLinks?: {
+    linkedin?: { url: string; visible: boolean };
+    twitter?: { url: string; visible: boolean };
+    youtube?: { url: string; visible: boolean };
+    facebook?: { url: string; visible: boolean };
+    instagram?: { url: string; visible: boolean };
+  };
   // API Integrations
   integrations: {
     mattermost?: {
@@ -602,12 +809,6 @@ export interface PlatformSettingsDoc {
       status: "connected" | "disconnected" | "error";
       lastTested?: Timestamp;
     };
-    docuseal?: {
-      apiKey?: string;
-      webhookSecret?: string;
-      status: "connected" | "disconnected" | "error";
-      lastTested?: Timestamp;
-    };
   };
   // LLM Configuration
   llmConfig?: {
@@ -625,6 +826,11 @@ export interface PlatformSettingsDoc {
     inAppEnabled: boolean;
     browserEnabled: boolean;
     soundEnabled: boolean;
+  };
+  // Navigation Visibility Settings (for admins to control what nav items are visible)
+  navigationSettings?: {
+    hiddenItems: string[]; // Array of nav item hrefs that are hidden
+    roleVisibility?: Record<string, string[]>; // Role -> array of visible nav item hrefs
   };
   updatedAt: Timestamp;
   updatedBy?: string;
@@ -1005,62 +1211,6 @@ export interface BookingDoc {
   updatedAt: Timestamp;
 }
 
-// ============================================================================
-// DocuSeal Integration Types
-// ============================================================================
-
-/** DocuSeal Template (cached locally) */
-export interface DocuSealTemplateDoc {
-  id: string;
-  docusealId: number;
-  name: string;
-  slug: string;
-  description?: string;
-  category: 'nda' | 'engagement' | 'supplier_qualification' | 'msa' | 'sow' | 'other';
-  fields: Array<{
-    name: string;
-    type: string;
-    required?: boolean;
-  }>;
-  submitterRoles: string[];
-  isActive: boolean;
-  lastSyncedAt: Timestamp;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-}
-
-/** DocuSeal Submission tracking */
-export interface DocuSealSubmissionDoc {
-  id: string;
-  docusealSubmissionId: number;
-  templateId: string;
-  templateName: string;
-  status: 'pending' | 'sent' | 'viewed' | 'completed' | 'declined' | 'expired';
-  // Related entities
-  organizationId?: string;
-  organizationName?: string;
-  opportunityId?: string;
-  projectId?: string;
-  // Submitters
-  submitters: Array<{
-    email: string;
-    name: string;
-    role: string;
-    status: 'pending' | 'sent' | 'opened' | 'completed' | 'declined';
-    completedAt?: Timestamp;
-    signedDocumentUrl?: string;
-  }>;
-  // Document URLs
-  combinedDocumentUrl?: string;
-  auditLogUrl?: string;
-  // Metadata
-  sentAt?: Timestamp;
-  completedAt?: Timestamp;
-  expiresAt?: Timestamp;
-  createdBy: string;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-}
 
 // ============================================================================
 // Software License Keys
@@ -1071,7 +1221,6 @@ export type ToolType =
   | 'supplier-search'
   | 'ai-workforce'
   | 'proposal-creator'
-  | 'docuseal'
   | 'gohighlevel'
   | 'linkedin-content'
   | 'bug-tracker'
@@ -1321,9 +1470,6 @@ export const COLLECTIONS = {
   // Team Member Availability & Bookings
   TEAM_MEMBER_AVAILABILITY: "teamMemberAvailability",
   BOOKINGS: "bookings",
-  // DocuSeal Integration Collections
-  DOCUSEAL_TEMPLATES: "docusealTemplates",
-  DOCUSEAL_SUBMISSIONS: "docusealSubmissions",
   // Software License Keys
   SOFTWARE_KEYS: "softwareKeys",
   KEY_ACTIVATIONS: "keyActivations",
@@ -1334,6 +1480,13 @@ export const COLLECTIONS = {
   // Mattermost Playbooks
   MATTERMOST_PLAYBOOKS: "mattermostPlaybooks",
   MATTERMOST_PLAYBOOK_RUNS: "mattermostPlaybookRuns",
+  // Book a Call Leads
+  BOOK_CALL_LEADS: "bookCallLeads",
+  // Events
+  EVENTS: "events",
+  // NDA Management
+  NDA_TEMPLATES: "ndaTemplates",
+  NDA_DOCUMENTS: "ndaDocuments",
 } as const;
 
 // ============================================================================

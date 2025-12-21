@@ -34,9 +34,18 @@ import {
   notifyTeamMemberAdded,
 } from "@/lib/eos2-webhooks";
 
+// Milestone type for Rocks
+export interface Milestone {
+  id: string;
+  title: string;
+  completed: boolean;
+  completedAt?: string;
+}
+
 // Client-side types (with Date instead of Timestamp)
 export interface Rock {
   id: string;
+  title: string;
   description: string;
   owner: string;
   ownerId: string;
@@ -44,6 +53,11 @@ export interface Rock {
   status: "on-track" | "at-risk" | "off-track" | "complete";
   progress: number;
   quarter: string;
+  milestones?: Milestone[];
+  linkedIssueIds?: string[];
+  linkedTodoIds?: string[];
+  linkedMetricIds?: string[];
+  notes?: string;
 }
 
 export interface ScorecardMetric {
@@ -55,30 +69,41 @@ export interface ScorecardMetric {
   ownerId: string;
   trend: "up" | "down" | "flat";
   unit?: string;
+  linkedRockIds?: string[];
 }
 
 export interface Issue {
   id: string;
+  title: string;
   description: string;
   priority: "high" | "medium" | "low";
   identifiedDate: string;
   owner: string;
   ownerId: string;
   status: "open" | "in-progress" | "solved";
+  linkedRockId?: string;
+  linkedTodoIds?: string[];
+  meetingId?: string;
+  notes?: string;
 }
 
 export interface Todo {
   id: string;
+  title: string;
   description: string;
   owner: string;
   ownerId: string;
   dueDate: string;
   status: "not-started" | "in-progress" | "complete";
   createdDate: string;
+  linkedRockId?: string;
+  linkedIssueId?: string;
+  meetingId?: string;
 }
 
 export interface Meeting {
   id: string;
+  title?: string;
   date: string;
   startTime: string;
   endTime: string;
@@ -88,6 +113,9 @@ export interface Meeting {
   rocksReviewed: boolean;
   scorecardReviewed: boolean;
   todoCompletionRate: number;
+  reviewedRockIds?: string[];
+  solvedIssueIds?: string[];
+  createdTodoIds?: string[];
 }
 
 export interface TeamMember {
@@ -146,6 +174,7 @@ export function useTractionData() {
             const d = doc.data() as TractionRockDoc;
             return {
               id: doc.id,
+              title: d.title || d.description?.substring(0, 50) || "Untitled Rock",
               description: d.description,
               owner: d.ownerName,
               ownerId: d.ownerId,
@@ -153,6 +182,16 @@ export function useTractionData() {
               status: d.status,
               progress: d.progress,
               quarter: d.quarter,
+              milestones: d.milestones?.map(m => ({
+                id: m.id,
+                title: m.title,
+                completed: m.completed,
+                completedAt: m.completedAt ? timestampToDateString(m.completedAt) : undefined,
+              })),
+              linkedIssueIds: d.linkedIssueIds,
+              linkedTodoIds: d.linkedTodoIds,
+              linkedMetricIds: d.linkedMetricIds,
+              notes: d.notes,
             } as Rock;
           });
           setRocks(data);
@@ -179,6 +218,7 @@ export function useTractionData() {
               ownerId: d.ownerId,
               trend: d.trend,
               unit: d.unit,
+              linkedRockIds: d.linkedRockIds,
             } as ScorecardMetric;
           });
           setMetrics(data);
@@ -198,12 +238,17 @@ export function useTractionData() {
             const d = doc.data() as TractionIssueDoc;
             return {
               id: doc.id,
+              title: d.title || d.description?.substring(0, 50) || "Untitled Issue",
               description: d.description,
               priority: d.priority,
               identifiedDate: timestampToDateString(d.identifiedDate),
               owner: d.ownerName,
               ownerId: d.ownerId,
               status: d.status,
+              linkedRockId: d.linkedRockId,
+              linkedTodoIds: d.linkedTodoIds,
+              meetingId: d.meetingId,
+              notes: d.notes,
             } as Issue;
           });
           setIssues(data);
@@ -223,12 +268,16 @@ export function useTractionData() {
             const d = doc.data() as TractionTodoDoc;
             return {
               id: doc.id,
+              title: d.title || d.description?.substring(0, 50) || "Untitled Todo",
               description: d.description,
               owner: d.ownerName,
               ownerId: d.ownerId,
               dueDate: timestampToDateString(d.dueDate),
               status: d.status,
               createdDate: timestampToDateString(d.createdAt),
+              linkedRockId: d.linkedRockId,
+              linkedIssueId: d.linkedIssueId,
+              meetingId: d.meetingId,
             } as Todo;
           });
           setTodos(data);
@@ -248,6 +297,7 @@ export function useTractionData() {
             const d = doc.data() as TractionMeetingDoc;
             return {
               id: doc.id,
+              title: d.title,
               date: timestampToDateString(d.date),
               startTime: d.startTime,
               endTime: d.endTime,
@@ -257,6 +307,9 @@ export function useTractionData() {
               rocksReviewed: d.rocksReviewed,
               scorecardReviewed: d.scorecardReviewed,
               todoCompletionRate: d.todoCompletionRate,
+              reviewedRockIds: d.reviewedRockIds,
+              solvedIssueIds: d.solvedIssueIds,
+              createdTodoIds: d.createdTodoIds,
             } as Meeting;
           });
           setMeetings(data);
@@ -308,20 +361,31 @@ export function useTractionData() {
     if (!db) return;
     const now = Timestamp.now();
     await addDoc(collection(db, COLLECTIONS.TRACTION_ROCKS), {
+      title: rock.title,
       description: rock.description,
       ownerId: rock.ownerId || "",
       ownerName: rock.owner,
-      dueDate: dateStringToTimestamp(rock.dueDate),
+      dueDate: rock.dueDate ? dateStringToTimestamp(rock.dueDate) : now,
       status: rock.status,
       progress: rock.progress,
       quarter: rock.quarter,
+      milestones: rock.milestones?.map(m => ({
+        id: m.id,
+        title: m.title,
+        completed: m.completed,
+        completedAt: m.completedAt ? dateStringToTimestamp(m.completedAt) : undefined,
+      })),
+      linkedIssueIds: rock.linkedIssueIds,
+      linkedTodoIds: rock.linkedTodoIds,
+      linkedMetricIds: rock.linkedMetricIds,
+      notes: rock.notes,
       createdAt: now,
       updatedAt: now,
     } as Omit<TractionRockDoc, "id">);
     
     // Send webhook notification
     notifyRockCreated({
-      description: rock.description,
+      description: rock.title || rock.description,
       owner: rock.owner,
       quarter: rock.quarter,
       dueDate: rock.dueDate,
@@ -333,6 +397,7 @@ export function useTractionData() {
   const updateRock = useCallback(async (id: string, rock: Partial<Rock>, previousStatus?: string) => {
     if (!db) return;
     const updateData: Record<string, unknown> = { updatedAt: Timestamp.now() };
+    if (rock.title !== undefined) updateData.title = rock.title;
     if (rock.description !== undefined) updateData.description = rock.description;
     if (rock.owner !== undefined) updateData.ownerName = rock.owner;
     if (rock.ownerId !== undefined) updateData.ownerId = rock.ownerId;
@@ -340,6 +405,18 @@ export function useTractionData() {
     if (rock.status !== undefined) updateData.status = rock.status;
     if (rock.progress !== undefined) updateData.progress = rock.progress;
     if (rock.quarter !== undefined) updateData.quarter = rock.quarter;
+    if (rock.milestones !== undefined) {
+      updateData.milestones = rock.milestones.map(m => ({
+        id: m.id,
+        title: m.title,
+        completed: m.completed,
+        completedAt: m.completedAt ? dateStringToTimestamp(m.completedAt) : undefined,
+      }));
+    }
+    if (rock.linkedIssueIds !== undefined) updateData.linkedIssueIds = rock.linkedIssueIds;
+    if (rock.linkedTodoIds !== undefined) updateData.linkedTodoIds = rock.linkedTodoIds;
+    if (rock.linkedMetricIds !== undefined) updateData.linkedMetricIds = rock.linkedMetricIds;
+    if (rock.notes !== undefined) updateData.notes = rock.notes;
     await updateDoc(doc(db, COLLECTIONS.TRACTION_ROCKS, id), updateData);
     
     // Send webhook notification if status changed
@@ -347,7 +424,7 @@ export function useTractionData() {
       const existingRock = rocks.find(r => r.id === id);
       if (existingRock) {
         notifyRockStatusChanged({
-          description: rock.description || existingRock.description,
+          description: rock.title || rock.description || existingRock.description,
           owner: rock.owner || existingRock.owner,
           quarter: rock.quarter || existingRock.quarter,
           dueDate: rock.dueDate || existingRock.dueDate,
@@ -434,19 +511,24 @@ export function useTractionData() {
     if (!db) return;
     const now = Timestamp.now();
     await addDoc(collection(db, COLLECTIONS.TRACTION_ISSUES), {
+      title: issue.title,
       description: issue.description,
       priority: issue.priority,
       identifiedDate: dateStringToTimestamp(issue.identifiedDate),
       ownerId: issue.ownerId || "",
       ownerName: issue.owner,
       status: issue.status,
+      linkedRockId: issue.linkedRockId,
+      linkedTodoIds: issue.linkedTodoIds,
+      meetingId: issue.meetingId,
+      notes: issue.notes,
       createdAt: now,
       updatedAt: now,
     } as Omit<TractionIssueDoc, "id">);
     
     // Send webhook notification
     notifyIssueCreated({
-      description: issue.description,
+      description: issue.title || issue.description,
       owner: issue.owner,
       priority: issue.priority,
       identifiedDate: issue.identifiedDate,
@@ -456,11 +538,16 @@ export function useTractionData() {
   const updateIssue = useCallback(async (id: string, issue: Partial<Issue>) => {
     if (!db) return;
     const updateData: Record<string, unknown> = { updatedAt: Timestamp.now() };
+    if (issue.title !== undefined) updateData.title = issue.title;
     if (issue.description !== undefined) updateData.description = issue.description;
     if (issue.priority !== undefined) updateData.priority = issue.priority;
     if (issue.identifiedDate !== undefined) updateData.identifiedDate = dateStringToTimestamp(issue.identifiedDate);
     if (issue.owner !== undefined) updateData.ownerName = issue.owner;
     if (issue.ownerId !== undefined) updateData.ownerId = issue.ownerId;
+    if (issue.linkedRockId !== undefined) updateData.linkedRockId = issue.linkedRockId;
+    if (issue.linkedTodoIds !== undefined) updateData.linkedTodoIds = issue.linkedTodoIds;
+    if (issue.meetingId !== undefined) updateData.meetingId = issue.meetingId;
+    if (issue.notes !== undefined) updateData.notes = issue.notes;
     if (issue.status !== undefined) {
       updateData.status = issue.status;
       if (issue.status === "solved") {
@@ -469,7 +556,7 @@ export function useTractionData() {
         const existingIssue = issues.find(i => i.id === id);
         if (existingIssue) {
           notifyIssueSolved({
-            description: issue.description || existingIssue.description,
+            description: issue.title || issue.description || existingIssue.description,
             owner: issue.owner || existingIssue.owner,
             priority: issue.priority || existingIssue.priority,
             identifiedDate: issue.identifiedDate || existingIssue.identifiedDate,
@@ -490,18 +577,22 @@ export function useTractionData() {
     if (!db) return;
     const now = Timestamp.now();
     await addDoc(collection(db, COLLECTIONS.TRACTION_TODOS), {
+      title: todo.title,
       description: todo.description,
       ownerId: todo.ownerId || "",
       ownerName: todo.owner,
-      dueDate: dateStringToTimestamp(todo.dueDate),
+      dueDate: todo.dueDate ? dateStringToTimestamp(todo.dueDate) : now,
       status: todo.status,
+      linkedRockId: todo.linkedRockId,
+      linkedIssueId: todo.linkedIssueId,
+      meetingId: todo.meetingId,
       createdAt: now,
       updatedAt: now,
     } as Omit<TractionTodoDoc, "id">);
     
     // Send webhook notification
     notifyTodoCreated({
-      description: todo.description,
+      description: todo.title || todo.description,
       owner: todo.owner,
       dueDate: todo.dueDate,
     });
@@ -510,10 +601,14 @@ export function useTractionData() {
   const updateTodo = useCallback(async (id: string, todo: Partial<Todo>) => {
     if (!db) return;
     const updateData: Record<string, unknown> = { updatedAt: Timestamp.now() };
+    if (todo.title !== undefined) updateData.title = todo.title;
     if (todo.description !== undefined) updateData.description = todo.description;
     if (todo.owner !== undefined) updateData.ownerName = todo.owner;
     if (todo.ownerId !== undefined) updateData.ownerId = todo.ownerId;
     if (todo.dueDate !== undefined) updateData.dueDate = dateStringToTimestamp(todo.dueDate);
+    if (todo.linkedRockId !== undefined) updateData.linkedRockId = todo.linkedRockId;
+    if (todo.linkedIssueId !== undefined) updateData.linkedIssueId = todo.linkedIssueId;
+    if (todo.meetingId !== undefined) updateData.meetingId = todo.meetingId;
     if (todo.status !== undefined) {
       updateData.status = todo.status;
       if (todo.status === "complete") {
@@ -522,7 +617,7 @@ export function useTractionData() {
         const existingTodo = todos.find(t => t.id === id);
         if (existingTodo) {
           notifyTodoCompleted({
-            description: todo.description || existingTodo.description,
+            description: todo.title || todo.description || existingTodo.description,
             owner: todo.owner || existingTodo.owner,
             dueDate: todo.dueDate || existingTodo.dueDate,
           });

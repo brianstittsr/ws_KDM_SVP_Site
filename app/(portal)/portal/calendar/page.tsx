@@ -425,10 +425,44 @@ export default function CalendarPage() {
     }
   };
 
-  const handleEventUpdate = (id: string, updates: Partial<CalendarEventData>) => {
-    setEvents((prev) =>
-      prev.map((event) => (event.id === id ? { ...event, ...updates } : event))
-    );
+  const handleEventUpdate = async (id: string, updates: Partial<CalendarEventData>) => {
+    // Skip GHL events (they're read-only from external source)
+    if (id.startsWith("ghl-")) {
+      showError("Cannot edit GoHighLevel events directly");
+      return;
+    }
+    
+    try {
+      // Update in Firebase
+      if (db) {
+        const eventRef = doc(db, COLLECTIONS.CALENDAR_EVENTS, id);
+        const firestoreUpdates: Record<string, any> = {
+          updatedAt: Timestamp.now(),
+        };
+        
+        if (updates.title !== undefined) firestoreUpdates.title = updates.title;
+        if (updates.description !== undefined) firestoreUpdates.description = updates.description;
+        if (updates.startDate !== undefined) firestoreUpdates.startDate = Timestamp.fromDate(updates.startDate);
+        if (updates.endDate !== undefined) firestoreUpdates.endDate = Timestamp.fromDate(updates.endDate);
+        if (updates.type !== undefined) firestoreUpdates.type = updates.type;
+        if (updates.color !== undefined) firestoreUpdates.color = updates.color;
+        if (updates.location !== undefined) firestoreUpdates.location = updates.location;
+        if (updates.attendees !== undefined) firestoreUpdates.attendees = updates.attendees;
+        if (updates.allDay !== undefined) firestoreUpdates.allDay = updates.allDay;
+        
+        await updateDoc(eventRef, firestoreUpdates);
+      }
+      
+      // Update local state
+      setEvents((prev) =>
+        prev.map((event) => (event.id === id ? { ...event, ...updates } : event))
+      );
+      
+      showSuccess("Event updated");
+    } catch (error) {
+      console.error("Error updating event:", error);
+      showError("Failed to update event");
+    }
   };
 
   const handleEventDelete = (id: string) => {

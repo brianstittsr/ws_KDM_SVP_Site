@@ -35,11 +35,6 @@ export const TOOL_DEFINITIONS: Record<ToolType, { name: string; description: str
     description: 'Create and manage professional proposals',
     icon: 'FileText'
   },
-  'docuseal': { 
-    name: 'DocuSeal', 
-    description: 'Electronic document signing and management',
-    icon: 'PenTool'
-  },
   'gohighlevel': { 
     name: 'GoHighLevel CRM', 
     description: 'CRM integration with GoHighLevel',

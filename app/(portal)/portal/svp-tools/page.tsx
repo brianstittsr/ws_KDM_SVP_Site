@@ -27,6 +27,9 @@ import {
   CreditCard,
   Youtube,
   FileText,
+  Brain,
+  Factory,
+  DollarSign,
 } from "lucide-react";
 
 // Tool definitions based on the AI Media Suite
@@ -335,6 +338,58 @@ export default function SVPToolsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Business Planning Tools Section */}
+      <Card className="border-purple-200 bg-gradient-to-r from-purple-50 to-pink-50">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 text-white">
+                <Brain className="h-6 w-6" />
+              </div>
+              <div>
+                <CardTitle className="text-xl bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                  Business Planning Tools
+                </CardTitle>
+                <CardDescription>
+                  AI-facilitated strategic planning with Mary, your SVP Business Analyst
+                </CardDescription>
+              </div>
+            </div>
+            <Button asChild className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700">
+              <Link href="/portal/svp-tools/business-planning">
+                <Sparkles className="mr-2 h-4 w-4" />
+                Open Planning Tools
+              </Link>
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="flex items-center gap-3 p-3 bg-white/60 rounded-lg">
+              <Crown className="h-5 w-5 text-purple-500" />
+              <div>
+                <p className="font-medium text-sm">C-Suite Planning</p>
+                <p className="text-xs text-muted-foreground">CEO, COO, CRO, CTO tools</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 p-3 bg-white/60 rounded-lg">
+              <Factory className="h-5 w-5 text-orange-500" />
+              <div>
+                <p className="font-medium text-sm">Manufacturing Planning</p>
+                <p className="text-xs text-muted-foreground">Plant, Shift, Multi-Site tools</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 p-3 bg-white/60 rounded-lg">
+              <DollarSign className="h-5 w-5 text-green-500" />
+              <div>
+                <p className="font-medium text-sm">Finance Planning</p>
+                <p className="text-xs text-muted-foreground">FP&A, Treasury, Controller tools</p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>

@@ -385,6 +385,38 @@ export default function ApolloSearchPage() {
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
   const [addingToList, setAddingToList] = useState(false);
 
+  // Check if a contact exists in any saved list (by name and company)
+  const findContactInSavedLists = (name: string, company: string): { listName: string; email?: string; phone?: string } | null => {
+    for (const list of savedLists) {
+      const contacts = list.contacts || [];
+      const found = contacts.find((c: SavedListContact) => 
+        c.name?.toLowerCase() === name?.toLowerCase() && 
+        c.company?.toLowerCase() === company?.toLowerCase()
+      );
+      if (found) {
+        return {
+          listName: list.name,
+          email: found.email && found.email !== "Not available" ? found.email : undefined,
+          phone: found.phone && found.phone !== "Not available" ? found.phone : undefined,
+        };
+      }
+    }
+    return null;
+  };
+
+  // Check if contact already has purchased info in any saved list
+  const getExistingContactInfo = (name: string, company: string): { email?: string; phone?: string; listName?: string } => {
+    const existing = findContactInSavedLists(name, company);
+    if (existing) {
+      return {
+        email: existing.email,
+        phone: existing.phone,
+        listName: existing.listName,
+      };
+    }
+    return {};
+  };
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -963,6 +995,30 @@ export default function ApolloSearchPage() {
     const apolloId = contact.apolloId;
     if (!apolloApiKey || !db || revealingContacts.has(`list-email-${apolloId}`)) return;
 
+    // Check if this contact already has email in another saved list
+    const existingInfo = getExistingContactInfo(contact.name, contact.company);
+    if (existingInfo.email) {
+      // Use existing email instead of making API call
+      const listRef = doc(db, COLLECTIONS.APOLLO_SAVED_LISTS, listId);
+      const listSnap = await getDoc(listRef);
+      
+      if (listSnap.exists()) {
+        const listData = listSnap.data();
+        const updatedContacts = [...(listData.contacts || [])];
+        const contactIdx = updatedContacts.findIndex((c: { apolloId: string }) => c.apolloId === apolloId);
+        if (contactIdx !== -1) {
+          updatedContacts[contactIdx] = {
+            ...updatedContacts[contactIdx],
+            email: existingInfo.email,
+          };
+          await updateDoc(listRef, { contacts: updatedContacts, updatedAt: Timestamp.now() });
+        }
+      }
+      await loadSavedLists();
+      console.log(`Email found in existing list "${existingInfo.listName}" - no API credit used`);
+      return;
+    }
+
     setRevealingContacts(prev => new Set(prev).add(`list-email-${apolloId}`));
 
     try {
@@ -1059,6 +1115,30 @@ export default function ApolloSearchPage() {
     e.stopPropagation();
     const apolloId = contact.apolloId;
     if (!apolloApiKey || !db || revealingContacts.has(`list-phone-${apolloId}`)) return;
+
+    // Check if this contact already has phone in another saved list
+    const existingInfo = getExistingContactInfo(contact.name, contact.company);
+    if (existingInfo.phone) {
+      // Use existing phone instead of making API call
+      const listRef = doc(db, COLLECTIONS.APOLLO_SAVED_LISTS, listId);
+      const listSnap = await getDoc(listRef);
+      
+      if (listSnap.exists()) {
+        const listData = listSnap.data();
+        const updatedContacts = [...(listData.contacts || [])];
+        const contactIdx = updatedContacts.findIndex((c: { apolloId: string }) => c.apolloId === apolloId);
+        if (contactIdx !== -1) {
+          updatedContacts[contactIdx] = {
+            ...updatedContacts[contactIdx],
+            phone: existingInfo.phone,
+          };
+          await updateDoc(listRef, { contacts: updatedContacts, updatedAt: Timestamp.now() });
+        }
+      }
+      await loadSavedLists();
+      console.log(`Phone found in existing list "${existingInfo.listName}" - no API credit used`);
+      return;
+    }
 
     setRevealingContacts(prev => new Set(prev).add(`list-phone-${apolloId}`));
 
@@ -2118,20 +2198,40 @@ export default function ApolloSearchPage() {
                                                   {contact.email}
                                                   <CheckCircle className="h-3 w-3" />
                                                 </span>
-                                              ) : (
-                                                <button
-                                                  onClick={(e) => purchaseListContactEmail(list.id, contact, e)}
-                                                  disabled={revealingContacts.has(`list-email-${contact.apolloId}`) || connectionStatus !== "connected"}
-                                                  className="text-xs px-2 py-0.5 rounded bg-purple-50 hover:bg-purple-100 text-purple-600 flex items-center gap-1 transition-colors disabled:opacity-50 border border-purple-200"
-                                                >
-                                                  {revealingContacts.has(`list-email-${contact.apolloId}`) ? (
-                                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                                  ) : (
-                                                    <Mail className="h-3 w-3" />
-                                                  )}
-                                                  {revealingContacts.has(`list-email-${contact.apolloId}`) ? "..." : "Email"}
-                                                </button>
-                                              )}
+                                              ) : (() => {
+                                                const existingInfo = getExistingContactInfo(contact.name, contact.company);
+                                                return existingInfo.email ? (
+                                                  <TooltipProvider>
+                                                    <Tooltip>
+                                                      <TooltipTrigger asChild>
+                                                        <button
+                                                          onClick={(e) => purchaseListContactEmail(list.id, contact, e)}
+                                                          className="text-xs px-2 py-0.5 rounded bg-green-50 hover:bg-green-100 text-green-600 flex items-center gap-1 transition-colors border border-green-200"
+                                                        >
+                                                          <Mail className="h-3 w-3" />
+                                                          Copy from list
+                                                        </button>
+                                                      </TooltipTrigger>
+                                                      <TooltipContent>
+                                                        <p>Email already in &quot;{existingInfo.listName}&quot; - click to copy (free)</p>
+                                                      </TooltipContent>
+                                                    </Tooltip>
+                                                  </TooltipProvider>
+                                                ) : (
+                                                  <button
+                                                    onClick={(e) => purchaseListContactEmail(list.id, contact, e)}
+                                                    disabled={revealingContacts.has(`list-email-${contact.apolloId}`) || connectionStatus !== "connected"}
+                                                    className="text-xs px-2 py-0.5 rounded bg-purple-50 hover:bg-purple-100 text-purple-600 flex items-center gap-1 transition-colors disabled:opacity-50 border border-purple-200"
+                                                  >
+                                                    {revealingContacts.has(`list-email-${contact.apolloId}`) ? (
+                                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                                    ) : (
+                                                      <Mail className="h-3 w-3" />
+                                                    )}
+                                                    {revealingContacts.has(`list-email-${contact.apolloId}`) ? "..." : "Email"}
+                                                  </button>
+                                                );
+                                              })()}
                                               
                                               {/* Phone display or purchase button */}
                                               {contact.phone ? (
@@ -2140,20 +2240,40 @@ export default function ApolloSearchPage() {
                                                   {contact.phone}
                                                   <CheckCircle className="h-3 w-3" />
                                                 </span>
-                                              ) : (
-                                                <button
-                                                  onClick={(e) => purchaseListContactPhone(list.id, contact, e)}
-                                                  disabled={revealingContacts.has(`list-phone-${contact.apolloId}`) || connectionStatus !== "connected"}
-                                                  className="text-xs px-2 py-0.5 rounded bg-purple-50 hover:bg-purple-100 text-purple-600 flex items-center gap-1 transition-colors disabled:opacity-50 border border-purple-200"
-                                                >
-                                                  {revealingContacts.has(`list-phone-${contact.apolloId}`) ? (
-                                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                                  ) : (
-                                                    <Phone className="h-3 w-3" />
-                                                  )}
-                                                  {revealingContacts.has(`list-phone-${contact.apolloId}`) ? "..." : "Phone"}
-                                                </button>
-                                              )}
+                                              ) : (() => {
+                                                const existingInfo = getExistingContactInfo(contact.name, contact.company);
+                                                return existingInfo.phone ? (
+                                                  <TooltipProvider>
+                                                    <Tooltip>
+                                                      <TooltipTrigger asChild>
+                                                        <button
+                                                          onClick={(e) => purchaseListContactPhone(list.id, contact, e)}
+                                                          className="text-xs px-2 py-0.5 rounded bg-green-50 hover:bg-green-100 text-green-600 flex items-center gap-1 transition-colors border border-green-200"
+                                                        >
+                                                          <Phone className="h-3 w-3" />
+                                                          Copy from list
+                                                        </button>
+                                                      </TooltipTrigger>
+                                                      <TooltipContent>
+                                                        <p>Phone already in &quot;{existingInfo.listName}&quot; - click to copy (free)</p>
+                                                      </TooltipContent>
+                                                    </Tooltip>
+                                                  </TooltipProvider>
+                                                ) : (
+                                                  <button
+                                                    onClick={(e) => purchaseListContactPhone(list.id, contact, e)}
+                                                    disabled={revealingContacts.has(`list-phone-${contact.apolloId}`) || connectionStatus !== "connected"}
+                                                    className="text-xs px-2 py-0.5 rounded bg-purple-50 hover:bg-purple-100 text-purple-600 flex items-center gap-1 transition-colors disabled:opacity-50 border border-purple-200"
+                                                  >
+                                                    {revealingContacts.has(`list-phone-${contact.apolloId}`) ? (
+                                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                                    ) : (
+                                                      <Phone className="h-3 w-3" />
+                                                    )}
+                                                    {revealingContacts.has(`list-phone-${contact.apolloId}`) ? "..." : "Phone"}
+                                                  </button>
+                                                );
+                                              })()}
                                             </div>
                                           </div>
                                         </div>

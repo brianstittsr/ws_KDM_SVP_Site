@@ -51,7 +51,16 @@ import {
   Volume2,
   VolumeX,
   Monitor,
+  Linkedin,
+  Twitter,
+  Youtube,
+  Facebook,
+  Instagram,
+  Globe,
+  Navigation,
+  LayoutDashboard,
 } from "lucide-react";
+import { ALL_NAV_ITEMS } from "@/components/portal/portal-sidebar";
 import { cn } from "@/lib/utils";
 import { WEBHOOK_EVENTS, testWebhookConnection, sendToBrianStitt, type WebhookEventType } from "@/lib/mattermost";
 import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
@@ -139,17 +148,6 @@ const apiConfigs: ApiKeyConfig[] = [
     status: "disconnected",
   },
   {
-    id: "docuseal",
-    name: "DocuSeal",
-    description: "Electronic document signing and management",
-    icon: FileSignature,
-    keyField: "API Key",
-    additionalFields: [
-      { name: "webhookSecret", label: "Webhook Secret (optional)", placeholder: "your-webhook-secret" },
-    ],
-    status: "disconnected",
-  },
-  {
     id: "mercury",
     name: "Mercury Bank",
     description: "Business banking with API access for accounts and transactions",
@@ -194,6 +192,15 @@ function SettingsPageContent() {
     useOllama: false,
   });
   
+  // Social links settings
+  const [socialLinks, setSocialLinks] = useState({
+    linkedin: { url: "", visible: true },
+    twitter: { url: "", visible: true },
+    youtube: { url: "", visible: true },
+    facebook: { url: "", visible: false },
+    instagram: { url: "", visible: false },
+  });
+  
   // Notification sync settings
   const [notificationSettings, setNotificationSettings] = useState({
     syncWithMattermost: true,
@@ -202,6 +209,30 @@ function SettingsPageContent() {
     soundEnabled: false,
   });
   const [browserPermission, setBrowserPermission] = useState<string>("default");
+  
+  // Navigation settings - role-based visibility
+  const [navigationSettings, setNavigationSettings] = useState<{
+    hiddenItems: string[];
+    roleVisibility: Record<string, string[]>; // role -> array of hidden item hrefs
+  }>({
+    hiddenItems: [],
+    roleVisibility: {
+      admin: [],
+      "team-member": [],
+      affiliate: [],
+      client: [],
+      viewer: [],
+    },
+  });
+  
+  // Available roles for visibility settings
+  const VISIBILITY_ROLES = [
+    { value: "admin", label: "Admin" },
+    { value: "team-member", label: "Team Member" },
+    { value: "affiliate", label: "Affiliate" },
+    { value: "client", label: "Client" },
+    { value: "viewer", label: "Viewer" },
+  ];
 
   // Load settings from Firebase on mount
   useEffect(() => {
@@ -250,13 +281,6 @@ function SettingsPageContent() {
                 accountId: data.integrations.zoom.accountId || "",
               };
             }
-            if (data.integrations.docuseal) {
-              loadedApiKeys.docuseal = {
-                apiKey: data.integrations.docuseal.apiKey || "",
-                webhookSecret: data.integrations.docuseal.webhookSecret || "",
-              };
-            }
-            
             setApiKeys(loadedApiKeys);
           }
           
@@ -279,6 +303,25 @@ function SettingsPageContent() {
           // Load notification settings
           if (data.notificationSettings) {
             setNotificationSettings(prev => ({ ...prev, ...data.notificationSettings }));
+          }
+          
+          // Load social links
+          if (data.socialLinks) {
+            setSocialLinks(prev => ({ ...prev, ...data.socialLinks }));
+          }
+          
+          // Load navigation settings
+          if (data.navigationSettings) {
+            setNavigationSettings({
+              hiddenItems: data.navigationSettings.hiddenItems || [],
+              roleVisibility: data.navigationSettings.roleVisibility || {
+                admin: [],
+                "team-member": [],
+                affiliate: [],
+                client: [],
+                viewer: [],
+              },
+            });
           }
         }
       } catch (error) {
@@ -332,11 +375,6 @@ function SettingsPageContent() {
             accountId: apiKeys.zoom?.accountId || "",
             status: testingStatus.zoom === "success" ? "connected" : "disconnected",
           },
-          docuseal: {
-            apiKey: apiKeys.docuseal?.apiKey || "",
-            webhookSecret: apiKeys.docuseal?.webhookSecret || "",
-            status: testingStatus.docuseal === "success" ? "connected" : "disconnected",
-          },
         },
         llmConfig: {
           provider: llmConfig.provider,
@@ -347,6 +385,8 @@ function SettingsPageContent() {
         },
         webhookEvents: webhookEvents as Record<string, boolean>,
         notificationSettings: notificationSettings,
+        socialLinks: socialLinks,
+        navigationSettings: navigationSettings,
         updatedAt: Timestamp.now(),
       };
       
@@ -469,6 +509,8 @@ function SettingsPageContent() {
           <TabsTrigger value="llm">LLM Configuration</TabsTrigger>
           <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
+          <TabsTrigger value="social">Social Links</TabsTrigger>
+          <TabsTrigger value="navigation">Navigation</TabsTrigger>
         </TabsList>
 
         {/* Integrations Tab */}
@@ -1401,6 +1443,339 @@ function SettingsPageContent() {
               <p className="text-sm text-muted-foreground mt-4">
                 Enable or disable specific events in the <strong>Webhooks</strong> tab. Events that are enabled there will also trigger in-browser notifications when sync is active.
               </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Social Links Tab */}
+        <TabsContent value="social" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <Globe className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <CardTitle>Social Media Links</CardTitle>
+                  <CardDescription>
+                    Configure social media links displayed in the footer. Links are only visible when a URL is provided and visibility is enabled.
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* LinkedIn */}
+              <div className="flex items-center gap-4 p-4 border rounded-lg">
+                <div className="p-2 rounded-lg bg-[#0077B5]/10">
+                  <Linkedin className="h-5 w-5 text-[#0077B5]" />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <Label htmlFor="linkedin-url">LinkedIn</Label>
+                  <Input
+                    id="linkedin-url"
+                    placeholder="https://linkedin.com/company/your-company"
+                    value={socialLinks.linkedin.url}
+                    onChange={(e) => {
+                      setSocialLinks(prev => ({ ...prev, linkedin: { ...prev.linkedin, url: e.target.value } }));
+                      setHasChanges(true);
+                    }}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="linkedin-visible" className="text-sm">Visible</Label>
+                  <Switch
+                    id="linkedin-visible"
+                    checked={socialLinks.linkedin.visible}
+                    onCheckedChange={(checked) => {
+                      setSocialLinks(prev => ({ ...prev, linkedin: { ...prev.linkedin, visible: checked } }));
+                      setHasChanges(true);
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Twitter/X */}
+              <div className="flex items-center gap-4 p-4 border rounded-lg">
+                <div className="p-2 rounded-lg bg-black/10">
+                  <Twitter className="h-5 w-5" />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <Label htmlFor="twitter-url">Twitter / X</Label>
+                  <Input
+                    id="twitter-url"
+                    placeholder="https://twitter.com/your-company"
+                    value={socialLinks.twitter.url}
+                    onChange={(e) => {
+                      setSocialLinks(prev => ({ ...prev, twitter: { ...prev.twitter, url: e.target.value } }));
+                      setHasChanges(true);
+                    }}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="twitter-visible" className="text-sm">Visible</Label>
+                  <Switch
+                    id="twitter-visible"
+                    checked={socialLinks.twitter.visible}
+                    onCheckedChange={(checked) => {
+                      setSocialLinks(prev => ({ ...prev, twitter: { ...prev.twitter, visible: checked } }));
+                      setHasChanges(true);
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* YouTube */}
+              <div className="flex items-center gap-4 p-4 border rounded-lg">
+                <div className="p-2 rounded-lg bg-[#FF0000]/10">
+                  <Youtube className="h-5 w-5 text-[#FF0000]" />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <Label htmlFor="youtube-url">YouTube</Label>
+                  <Input
+                    id="youtube-url"
+                    placeholder="https://youtube.com/@your-channel"
+                    value={socialLinks.youtube.url}
+                    onChange={(e) => {
+                      setSocialLinks(prev => ({ ...prev, youtube: { ...prev.youtube, url: e.target.value } }));
+                      setHasChanges(true);
+                    }}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="youtube-visible" className="text-sm">Visible</Label>
+                  <Switch
+                    id="youtube-visible"
+                    checked={socialLinks.youtube.visible}
+                    onCheckedChange={(checked) => {
+                      setSocialLinks(prev => ({ ...prev, youtube: { ...prev.youtube, visible: checked } }));
+                      setHasChanges(true);
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Facebook */}
+              <div className="flex items-center gap-4 p-4 border rounded-lg">
+                <div className="p-2 rounded-lg bg-[#1877F2]/10">
+                  <Facebook className="h-5 w-5 text-[#1877F2]" />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <Label htmlFor="facebook-url">Facebook</Label>
+                  <Input
+                    id="facebook-url"
+                    placeholder="https://facebook.com/your-page"
+                    value={socialLinks.facebook.url}
+                    onChange={(e) => {
+                      setSocialLinks(prev => ({ ...prev, facebook: { ...prev.facebook, url: e.target.value } }));
+                      setHasChanges(true);
+                    }}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="facebook-visible" className="text-sm">Visible</Label>
+                  <Switch
+                    id="facebook-visible"
+                    checked={socialLinks.facebook.visible}
+                    onCheckedChange={(checked) => {
+                      setSocialLinks(prev => ({ ...prev, facebook: { ...prev.facebook, visible: checked } }));
+                      setHasChanges(true);
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Instagram */}
+              <div className="flex items-center gap-4 p-4 border rounded-lg">
+                <div className="p-2 rounded-lg bg-gradient-to-br from-[#833AB4]/10 via-[#FD1D1D]/10 to-[#F77737]/10">
+                  <Instagram className="h-5 w-5 text-[#E4405F]" />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <Label htmlFor="instagram-url">Instagram</Label>
+                  <Input
+                    id="instagram-url"
+                    placeholder="https://instagram.com/your-account"
+                    value={socialLinks.instagram.url}
+                    onChange={(e) => {
+                      setSocialLinks(prev => ({ ...prev, instagram: { ...prev.instagram, url: e.target.value } }));
+                      setHasChanges(true);
+                    }}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="instagram-visible" className="text-sm">Visible</Label>
+                  <Switch
+                    id="instagram-visible"
+                    checked={socialLinks.instagram.visible}
+                    onCheckedChange={(checked) => {
+                      setSocialLinks(prev => ({ ...prev, instagram: { ...prev.instagram, visible: checked } }));
+                      setHasChanges(true);
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="p-4 bg-muted rounded-lg">
+                <h4 className="font-medium mb-2">How it works</h4>
+                <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+                  <li>Social links appear in the website footer</li>
+                  <li>Links are only shown when both a URL is provided AND visibility is enabled</li>
+                  <li>Empty URLs will hide the icon regardless of visibility setting</li>
+                  <li>Changes take effect after saving</li>
+                </ul>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Navigation Tab */}
+        <TabsContent value="navigation" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <Navigation className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <CardTitle>Navigation Visibility by Role</CardTitle>
+                  <CardDescription>
+                    Control which navigation items are visible to each user role. Toggle visibility per role.
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Role Legend */}
+              <div className="flex flex-wrap gap-2 p-3 bg-muted/50 rounded-lg">
+                <span className="text-sm font-medium text-muted-foreground mr-2">Roles:</span>
+                {VISIBILITY_ROLES.map((role) => (
+                  <Badge key={role.value} variant="outline" className="text-xs">
+                    {role.label}
+                  </Badge>
+                ))}
+              </div>
+
+              {/* Group nav items by section */}
+              {["Navigation", "Work", "Intelligence", "Admin", "Initiatives"].map((section) => {
+                const sectionItems = ALL_NAV_ITEMS.filter(item => item.section === section);
+                if (sectionItems.length === 0) return null;
+                
+                return (
+                  <div key={section} className="space-y-3">
+                    <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
+                      {section}
+                    </h3>
+                    <div className="grid gap-3">
+                      {sectionItems.map((item) => {
+                        const Icon = item.icon;
+                        // Count how many roles have this item hidden
+                        const hiddenForRoles = VISIBILITY_ROLES.filter(
+                          role => navigationSettings.roleVisibility[role.value]?.includes(item.href)
+                        );
+                        const visibleForAll = hiddenForRoles.length === 0;
+                        const hiddenForAll = hiddenForRoles.length === VISIBILITY_ROLES.length;
+                        
+                        return (
+                          <div
+                            key={item.href}
+                            className={cn(
+                              "p-4 border rounded-lg transition-colors",
+                              hiddenForAll ? "bg-muted/50 border-dashed" : "bg-background"
+                            )}
+                          >
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-3">
+                                <div className={cn(
+                                  "p-1.5 rounded",
+                                  hiddenForAll ? "bg-muted" : "bg-primary/10"
+                                )}>
+                                  <Icon className={cn(
+                                    "h-4 w-4",
+                                    hiddenForAll ? "text-muted-foreground" : "text-primary"
+                                  )} />
+                                </div>
+                                <div>
+                                  <p className={cn(
+                                    "font-medium text-sm",
+                                    hiddenForAll && "text-muted-foreground"
+                                  )}>
+                                    {item.title}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">{item.href}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {visibleForAll ? (
+                                  <Badge variant="outline" className="text-xs text-green-600 border-green-200">All Roles</Badge>
+                                ) : hiddenForAll ? (
+                                  <Badge variant="secondary" className="text-xs">Hidden for All</Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-xs text-yellow-600 border-yellow-200">
+                                    {VISIBILITY_ROLES.length - hiddenForRoles.length} of {VISIBILITY_ROLES.length} roles
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {/* Role toggles */}
+                            <div className="grid grid-cols-5 gap-2">
+                              {VISIBILITY_ROLES.map((role) => {
+                                const isHiddenForRole = navigationSettings.roleVisibility[role.value]?.includes(item.href);
+                                return (
+                                  <div
+                                    key={role.value}
+                                    className={cn(
+                                      "flex items-center justify-between p-2 rounded border text-xs",
+                                      isHiddenForRole ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"
+                                    )}
+                                  >
+                                    <span className={cn(
+                                      "font-medium truncate",
+                                      isHiddenForRole ? "text-red-700" : "text-green-700"
+                                    )}>
+                                      {role.label}
+                                    </span>
+                                    <Switch
+                                      className="scale-75"
+                                      checked={!isHiddenForRole}
+                                      onCheckedChange={(checked) => {
+                                        setNavigationSettings(prev => {
+                                          const currentHidden = prev.roleVisibility[role.value] || [];
+                                          const newHidden = checked
+                                            ? currentHidden.filter(h => h !== item.href)
+                                            : [...currentHidden, item.href];
+                                          return {
+                                            ...prev,
+                                            roleVisibility: {
+                                              ...prev.roleVisibility,
+                                              [role.value]: newHidden,
+                                            },
+                                          };
+                                        });
+                                        setHasChanges(true);
+                                      }}
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+
+              <div className="p-4 bg-muted rounded-lg">
+                <h4 className="font-medium mb-2">How it works</h4>
+                <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+                  <li>Toggle visibility for each navigation item per user role</li>
+                  <li>Green = visible to that role, Red = hidden from that role</li>
+                  <li>Admins can always see all items (hidden items appear faded with an eye icon)</li>
+                  <li>Use the &quot;Preview as Role&quot; feature in the sidebar to see what each role sees</li>
+                  <li>Changes take effect after saving</li>
+                </ul>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

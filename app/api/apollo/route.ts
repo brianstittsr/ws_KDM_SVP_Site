@@ -223,182 +223,273 @@ export async function POST(request: NextRequest) {
       }
 
       case "reveal_email": {
-        // Reveal email for a specific person using Apollo's people/bulk_match endpoint
+        // Reveal email for a specific person using Apollo's people/match endpoint
         const personId = searchParams?.personId;
         const firstName = searchParams?.firstName;
         const lastName = searchParams?.lastName;
         const company = searchParams?.company;
         const linkedIn = searchParams?.linkedIn;
         
-        if (!personId) {
-          return NextResponse.json(
-            { error: "Person ID is required", connected: false },
-            { status: 400 }
-          );
-        }
+        // Helper to check if email is a placeholder
+        const isPlaceholder = (email: string) => 
+          !email || 
+          email.includes("email_not_unlocked") || 
+          email.includes("@domain.com") ||
+          email === "email@domain.com";
 
-        // Build the match request - Apollo needs identifying info, not just ID
-        const matchDetails: Record<string, unknown> = {
-          reveal_personal_emails: true,
-        };
-        
-        // Add identifying information
-        if (firstName) matchDetails.first_name = firstName;
-        if (lastName) matchDetails.last_name = lastName;
-        if (company) matchDetails.organization_name = company;
-        if (linkedIn) matchDetails.linkedin_url = linkedIn;
-
-        // Use Apollo's people/bulk_match endpoint which can use Apollo IDs
-        const response = await fetch(`${APOLLO_API_BASE}/people/bulk_match`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
+        // Primary approach: Use people/match with name and company (most reliable)
+        if (firstName && lastName && company) {
+          const matchBody: Record<string, unknown> = {
+            first_name: firstName,
+            last_name: lastName,
+            organization_name: company,
             reveal_personal_emails: true,
-            details: [{ id: personId, ...matchDetails }],
-          }),
-        });
-
-        const data = await response.json();
-
-        if (response.ok && data.matches?.[0]) {
-          const person = data.matches[0];
-          // Filter out Apollo's placeholder emails that indicate the email wasn't revealed
-          const isPlaceholder = (email: string) => 
-            !email || 
-            email.includes("email_not_unlocked") || 
-            email.includes("@domain.com") ||
-            email === "email@domain.com";
+          };
           
-          const email = person.email && !isPlaceholder(person.email) 
-            ? person.email 
-            : person.personal_emails?.find((e: string) => !isPlaceholder(e)) || null;
-          
-          return NextResponse.json({
-            connected: true,
-            email,
-            person,
-          });
-        } else {
-          // Fallback: try the single match endpoint with name/company
-          if (firstName && lastName && company) {
-            const fallbackResponse = await fetch(`${APOLLO_API_BASE}/people/match`, {
-              method: "POST",
-              headers,
-              body: JSON.stringify({
-                first_name: firstName,
-                last_name: lastName,
-                organization_name: company,
-                reveal_personal_emails: true,
-              }),
-            });
-            
-            const fallbackData = await fallbackResponse.json();
-            
-            if (fallbackResponse.ok && fallbackData.person) {
-              const isPlaceholder = (email: string) => 
-                !email || 
-                email.includes("email_not_unlocked") || 
-                email.includes("@domain.com") ||
-                email === "email@domain.com";
-              
-              const fallbackEmail = fallbackData.person.email && !isPlaceholder(fallbackData.person.email)
-                ? fallbackData.person.email
-                : fallbackData.person.personal_emails?.find((e: string) => !isPlaceholder(e)) || null;
-              
-              return NextResponse.json({
-                connected: true,
-                email: fallbackEmail,
-                person: fallbackData.person,
-              });
-            }
+          // Add LinkedIn if available for better matching
+          if (linkedIn) {
+            matchBody.linkedin_url = linkedIn;
           }
-          
-          return NextResponse.json(
-            { connected: false, error: data.error || data.message || "Failed to reveal email" },
-            { status: response.status || 400 }
-          );
+
+          const response = await fetch(`${APOLLO_API_BASE}/people/match`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(matchBody),
+          });
+
+          const data = await response.json();
+          console.log("Apollo reveal_email response:", JSON.stringify(data, null, 2));
+
+          if (response.ok && data.person) {
+            // Check multiple email fields - Apollo stores emails in different places
+            const person = data.person;
+            let email = null;
+            
+            // Check primary email
+            if (person.email && !isPlaceholder(person.email)) {
+              email = person.email;
+            }
+            // Check personal_emails array
+            else if (person.personal_emails?.length > 0) {
+              email = person.personal_emails.find((e: string) => !isPlaceholder(e)) || null;
+            }
+            // Check work email
+            else if (person.work_email && !isPlaceholder(person.work_email)) {
+              email = person.work_email;
+            }
+            // Check organization email
+            else if (person.organization?.primary_email && !isPlaceholder(person.organization.primary_email)) {
+              email = person.organization.primary_email;
+            }
+            
+            return NextResponse.json({
+              connected: true,
+              email,
+              person,
+              debug: { 
+                hasEmail: !!person.email, 
+                hasPersonalEmails: person.personal_emails?.length > 0,
+                emailValue: person.email,
+                personalEmails: person.personal_emails,
+              }
+            });
+          }
         }
+
+        // Fallback: Try with LinkedIn URL if available
+        if (linkedIn) {
+          const linkedInResponse = await fetch(`${APOLLO_API_BASE}/people/match`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              linkedin_url: linkedIn,
+              reveal_personal_emails: true,
+            }),
+          });
+
+          const linkedInData = await linkedInResponse.json();
+
+          if (linkedInResponse.ok && linkedInData.person) {
+            const person = linkedInData.person;
+            let email = null;
+            
+            if (person.email && !isPlaceholder(person.email)) {
+              email = person.email;
+            } else if (person.personal_emails?.length > 0) {
+              email = person.personal_emails.find((e: string) => !isPlaceholder(e)) || null;
+            }
+            
+            return NextResponse.json({
+              connected: true,
+              email,
+              person,
+            });
+          }
+        }
+
+        // Last resort: Try bulk_match with Apollo ID
+        if (personId) {
+          const bulkResponse = await fetch(`${APOLLO_API_BASE}/people/bulk_match`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              reveal_personal_emails: true,
+              details: [{ 
+                id: personId,
+                ...(firstName && { first_name: firstName }),
+                ...(lastName && { last_name: lastName }),
+                ...(company && { organization_name: company }),
+              }],
+            }),
+          });
+
+          const bulkData = await bulkResponse.json();
+
+          if (bulkResponse.ok && bulkData.matches?.[0]) {
+            const person = bulkData.matches[0];
+            let email = null;
+            
+            if (person.email && !isPlaceholder(person.email)) {
+              email = person.email;
+            } else if (person.personal_emails?.length > 0) {
+              email = person.personal_emails.find((e: string) => !isPlaceholder(e)) || null;
+            }
+            
+            return NextResponse.json({
+              connected: true,
+              email,
+              person,
+            });
+          }
+        }
+        
+        return NextResponse.json(
+          { connected: false, error: "Could not reveal email - insufficient identifying information or email not available in Apollo", email: null },
+          { status: 200 }
+        );
       }
 
       case "reveal_phone": {
-        // Reveal phone for a specific person
+        // Reveal phone for a specific person using Apollo's people/match endpoint
         const personId = searchParams?.personId;
         const firstName = searchParams?.firstName;
         const lastName = searchParams?.lastName;
         const company = searchParams?.company;
         const linkedIn = searchParams?.linkedIn;
         
-        if (!personId) {
-          return NextResponse.json(
-            { error: "Person ID is required", connected: false },
-            { status: 400 }
-          );
-        }
-
-        // Build the match request
-        const matchDetails: Record<string, unknown> = {
-          reveal_phone_number: true,
-        };
-        
-        if (firstName) matchDetails.first_name = firstName;
-        if (lastName) matchDetails.last_name = lastName;
-        if (company) matchDetails.organization_name = company;
-        if (linkedIn) matchDetails.linkedin_url = linkedIn;
-
-        const response = await fetch(`${APOLLO_API_BASE}/people/bulk_match`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            reveal_phone_number: true,
-            details: [{ id: personId, ...matchDetails }],
-          }),
-        });
-
-        const data = await response.json();
-
-        if (response.ok && data.matches?.[0]) {
-          const person = data.matches[0];
-          const phone = person.phone_numbers?.[0]?.sanitized_number || 
-                       person.mobile_phone || 
-                       person.corporate_phone || null;
-          return NextResponse.json({
-            connected: true,
-            phone,
-            person,
-          });
-        } else {
-          // Fallback: try the single match endpoint with name/company
-          if (firstName && lastName && company) {
-            const fallbackResponse = await fetch(`${APOLLO_API_BASE}/people/match`, {
-              method: "POST",
-              headers,
-              body: JSON.stringify({
-                first_name: firstName,
-                last_name: lastName,
-                organization_name: company,
-                reveal_phone_number: true,
-              }),
-            });
-            
-            const fallbackData = await fallbackResponse.json();
-            
-            if (fallbackResponse.ok && fallbackData.person) {
-              const phone = fallbackData.person.phone_numbers?.[0]?.sanitized_number || 
-                           fallbackData.person.mobile_phone || 
-                           fallbackData.person.corporate_phone || null;
-              return NextResponse.json({
-                connected: true,
-                phone,
-                person: fallbackData.person,
-              });
+        // Helper to extract phone from person object
+        const extractPhone = (person: Record<string, unknown>): string | null => {
+          // Check phone_numbers array first
+          const phoneNumbers = person.phone_numbers as Array<{ sanitized_number?: string; raw_number?: string }> | undefined;
+          if (phoneNumbers && phoneNumbers.length > 0) {
+            const firstPhone = phoneNumbers[0];
+            if (firstPhone) {
+              return firstPhone.sanitized_number || firstPhone.raw_number || null;
             }
           }
+          // Check other phone fields
+          if (person.mobile_phone) return person.mobile_phone as string;
+          if (person.corporate_phone) return person.corporate_phone as string;
+          if (person.direct_phone) return person.direct_phone as string;
+          return null;
+        };
+
+        // Primary approach: Use people/match with name and company (most reliable)
+        if (firstName && lastName && company) {
+          const matchBody: Record<string, unknown> = {
+            first_name: firstName,
+            last_name: lastName,
+            organization_name: company,
+            reveal_phone_number: true,
+          };
           
-          return NextResponse.json(
-            { connected: false, error: data.error || data.message || "Failed to reveal phone" },
-            { status: response.status || 400 }
-          );
+          // Add LinkedIn if available for better matching
+          if (linkedIn) {
+            matchBody.linkedin_url = linkedIn;
+          }
+
+          const response = await fetch(`${APOLLO_API_BASE}/people/match`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(matchBody),
+          });
+
+          const data = await response.json();
+          console.log("Apollo reveal_phone response:", JSON.stringify(data, null, 2));
+
+          if (response.ok && data.person) {
+            const phone = extractPhone(data.person);
+            
+            return NextResponse.json({
+              connected: true,
+              phone,
+              person: data.person,
+              debug: {
+                phoneNumbers: data.person.phone_numbers,
+                mobilePhone: data.person.mobile_phone,
+                corporatePhone: data.person.corporate_phone,
+              }
+            });
+          }
         }
+
+        // Fallback: Try with LinkedIn URL if available
+        if (linkedIn) {
+          const linkedInResponse = await fetch(`${APOLLO_API_BASE}/people/match`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              linkedin_url: linkedIn,
+              reveal_phone_number: true,
+            }),
+          });
+
+          const linkedInData = await linkedInResponse.json();
+
+          if (linkedInResponse.ok && linkedInData.person) {
+            const phone = extractPhone(linkedInData.person);
+            
+            return NextResponse.json({
+              connected: true,
+              phone,
+              person: linkedInData.person,
+            });
+          }
+        }
+
+        // Last resort: Try bulk_match with Apollo ID
+        if (personId) {
+          const bulkResponse = await fetch(`${APOLLO_API_BASE}/people/bulk_match`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              reveal_phone_number: true,
+              details: [{ 
+                id: personId,
+                ...(firstName && { first_name: firstName }),
+                ...(lastName && { last_name: lastName }),
+                ...(company && { organization_name: company }),
+              }],
+            }),
+          });
+
+          const bulkData = await bulkResponse.json();
+
+          if (bulkResponse.ok && bulkData.matches?.[0]) {
+            const phone = extractPhone(bulkData.matches[0]);
+            
+            return NextResponse.json({
+              connected: true,
+              phone,
+              person: bulkData.matches[0],
+            });
+          }
+        }
+        
+        return NextResponse.json(
+          { connected: false, error: "Could not reveal phone - insufficient identifying information or phone not available in Apollo", phone: null },
+          { status: 200 }
+        );
       }
 
       case "bulk_reveal": {

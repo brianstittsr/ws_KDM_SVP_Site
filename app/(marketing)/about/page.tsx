@@ -3,7 +3,6 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Target,
   Eye,
@@ -12,9 +11,8 @@ import {
   Award,
   Factory,
   ArrowRight,
-  Linkedin,
-  Mail,
 } from "lucide-react";
+import { LeadershipTeam } from "@/components/marketing/leadership-team";
 
 export const metadata: Metadata = {
   title: "About Us",
@@ -49,36 +47,6 @@ const values = [
   },
 ];
 
-const team = [
-  {
-    name: "Leadership Team Member",
-    role: "CEO & Founder",
-    bio: "20+ years in manufacturing consulting and supplier development.",
-    avatar: "/team/ceo.jpg",
-    linkedin: "#",
-  },
-  {
-    name: "Operations Lead",
-    role: "VP Operations",
-    bio: "Expert in lean manufacturing and Industry 4.0 transformation.",
-    avatar: "/team/ops.jpg",
-    linkedin: "#",
-  },
-  {
-    name: "Quality Director",
-    role: "Director of Quality",
-    bio: "ISO Lead Auditor with extensive QMS implementation experience.",
-    avatar: "/team/quality.jpg",
-    linkedin: "#",
-  },
-  {
-    name: "Technology Lead",
-    role: "CTO",
-    bio: "Specializes in digital twin technology and manufacturing automation.",
-    avatar: "/team/cto.jpg",
-    linkedin: "#",
-  },
-];
 
 export default function AboutPage() {
   return (
@@ -206,38 +174,7 @@ export default function AboutPage() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">
-            {team.map((member) => (
-              <Card key={member.name} className="overflow-hidden">
-                <CardContent className="p-6 text-center">
-                  <Avatar className="h-24 w-24 mx-auto mb-4">
-                    <AvatarImage src={member.avatar} />
-                    <AvatarFallback className="bg-primary/10 text-primary text-2xl font-semibold">
-                      {member.name
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")}
-                    </AvatarFallback>
-                  </Avatar>
-                  <h3 className="text-lg font-semibold">{member.name}</h3>
-                  <p className="text-primary text-sm font-medium">{member.role}</p>
-                  <p className="text-muted-foreground text-sm mt-2">{member.bio}</p>
-                  <div className="flex justify-center gap-2 mt-4">
-                    <Button variant="ghost" size="icon" asChild>
-                      <Link href={member.linkedin}>
-                        <Linkedin className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                    <Button variant="ghost" size="icon" asChild>
-                      <Link href="#">
-                        <Mail className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <LeadershipTeam />
         </div>
       </section>
 

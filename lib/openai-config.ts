@@ -167,30 +167,6 @@ export async function getZoomConfig(): Promise<{ apiKey: string; apiSecret?: str
 }
 
 /**
- * Get DocuSeal config from Firebase settings
- */
-export async function getDocuSealConfig(): Promise<{ apiKey: string; webhookSecret?: string } | null> {
-  const settings = await getSettings();
-  
-  if (settings?.integrations?.docuseal?.apiKey) {
-    return {
-      apiKey: settings.integrations.docuseal.apiKey,
-      webhookSecret: settings.integrations.docuseal.webhookSecret,
-    };
-  }
-
-  // Fallback: Environment variable
-  if (process.env.DOCUSEAL_API_KEY) {
-    return {
-      apiKey: process.env.DOCUSEAL_API_KEY,
-      webhookSecret: process.env.DOCUSEAL_WEBHOOK_SECRET,
-    };
-  }
-
-  return null;
-}
-
-/**
  * Get LinkedIn config from Firebase settings
  */
 export async function getLinkedInConfig(): Promise<{ accessToken: string; clientId?: string; clientSecret?: string; organizationId?: string } | null> {

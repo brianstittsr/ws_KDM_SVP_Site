@@ -461,7 +461,7 @@ export default function NewAgreementPage() {
 
                 <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
                   <p className="text-sm text-blue-700">
-                    <strong>DocuSeal Integration:</strong> Signers will receive an email with a link to sign the document electronically.
+                    <strong>Digital Signature:</strong> Signers will receive an email with a link to sign the document electronically.
                   </p>
                 </div>
               </div>

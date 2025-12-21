@@ -126,6 +126,23 @@ const getEventIcon = (type: CalendarEventData["type"]) => {
   }
 };
 
+// Helper to determine if text should be white or black based on background color
+const getContrastColor = (hexColor: string): string => {
+  // Remove # if present
+  const hex = hexColor.replace('#', '');
+  
+  // Parse RGB values
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  
+  // Calculate relative luminance using sRGB
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  
+  // Return white for dark backgrounds, black for light backgrounds
+  return luminance > 0.5 ? '#000000' : '#ffffff';
+};
+
 // Event Form Component
 interface EventFormProps {
   event?: CalendarEventData;
@@ -389,6 +406,9 @@ export function BuiltInCalendar({
     const today = new Date();
     setCurrentDate(today);
     setSelectedDate(today);
+    // Switch to day view to show today's schedule
+    setView("day");
+    onViewChange?.("day");
   };
 
   const getEventsForDate = useCallback((date: Date): CalendarEventData[] => {
@@ -524,7 +544,7 @@ export function BuiltInCalendar({
                             !event.color && getEventColor(event.type),
                             !event.color && "text-white"
                           )}
-                          style={event.color ? { backgroundColor: event.color, color: "#ffffff" } : undefined}
+                          style={event.color ? { backgroundColor: event.color, color: getContrastColor(event.color) } : undefined}
                         >
                           {getEventIcon(event.type)}
                           <span className="font-medium">{formatTime(event.startDate)} - {formatTime(event.endDate)}</span>
@@ -624,7 +644,7 @@ export function BuiltInCalendar({
                             !event.color && getEventColor(event.type),
                             !event.color && "text-white"
                           )}
-                          style={event.color ? { backgroundColor: event.color, color: "#ffffff" } : undefined}
+                          style={event.color ? { backgroundColor: event.color, color: getContrastColor(event.color) } : undefined}
                         >
                           {getEventIcon(event.type)}
                           <span className="truncate">{event.title}</span>
