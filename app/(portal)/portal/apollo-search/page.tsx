@@ -1076,24 +1076,8 @@ export default function ApolloSearchPage() {
         // Reload saved lists
         await loadSavedLists();
       } else {
-        // Email not available - mark as unavailable in the list
-        const listRef = doc(db, COLLECTIONS.APOLLO_SAVED_LISTS, listId);
-        const listSnap = await getDoc(listRef);
-        
-        if (listSnap.exists()) {
-          const listData = listSnap.data();
-          const updatedContacts = [...(listData.contacts || [])];
-          const contactIdx = updatedContacts.findIndex((c: { apolloId: string }) => c.apolloId === apolloId);
-          if (contactIdx !== -1) {
-            updatedContacts[contactIdx] = {
-              ...updatedContacts[contactIdx],
-              email: "Not available",
-            };
-            await updateDoc(listRef, { contacts: updatedContacts, updatedAt: Timestamp.now() });
-          }
-        }
-        await loadSavedLists();
-        console.log("Email not available for this contact in Apollo");
+        // Email not available - don't mark as unavailable so user can retry
+        console.log("Email not available for this contact in Apollo - user can retry");
       }
     } catch (error) {
       console.error("Error purchasing email for list contact:", error);
@@ -1197,24 +1181,8 @@ export default function ApolloSearchPage() {
         // Reload saved lists
         await loadSavedLists();
       } else {
-        // Phone not available - mark as unavailable in the list
-        const listRef = doc(db, COLLECTIONS.APOLLO_SAVED_LISTS, listId);
-        const listSnap = await getDoc(listRef);
-        
-        if (listSnap.exists()) {
-          const listData = listSnap.data();
-          const updatedContacts = [...(listData.contacts || [])];
-          const contactIdx = updatedContacts.findIndex((c: { apolloId: string }) => c.apolloId === apolloId);
-          if (contactIdx !== -1) {
-            updatedContacts[contactIdx] = {
-              ...updatedContacts[contactIdx],
-              phone: "Not available",
-            };
-            await updateDoc(listRef, { contacts: updatedContacts, updatedAt: Timestamp.now() });
-          }
-        }
-        await loadSavedLists();
-        console.log("Phone not available for this contact in Apollo");
+        // Phone not available - don't mark as unavailable so user can retry
+        console.log("Phone not available for this contact in Apollo - user can retry");
       }
     } catch (error) {
       console.error("Error purchasing phone for list contact:", error);
@@ -2192,7 +2160,10 @@ export default function ApolloSearchPage() {
                                             </div>
                                             <div className="flex flex-wrap gap-2 mt-1">
                                               {/* Email display or purchase button */}
-                                              {contact.email ? (
+                                              {contact.email && 
+                                               !contact.email.includes("email_not_unlocked") && 
+                                               !contact.email.includes("@domain.com") && 
+                                               contact.email !== "Not available" ? (
                                                 <span className="text-xs text-purple-600 flex items-center gap-1 bg-purple-50 px-2 py-0.5 rounded">
                                                   <Mail className="h-3 w-3" />
                                                   {contact.email}
@@ -2234,7 +2205,7 @@ export default function ApolloSearchPage() {
                                               })()}
                                               
                                               {/* Phone display or purchase button */}
-                                              {contact.phone ? (
+                                              {contact.phone && contact.phone !== "Not available" ? (
                                                 <span className="text-xs text-purple-600 flex items-center gap-1 bg-purple-50 px-2 py-0.5 rounded">
                                                   <Phone className="h-3 w-3" />
                                                   {contact.phone}
