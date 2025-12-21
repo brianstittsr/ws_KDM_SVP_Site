@@ -1061,8 +1061,13 @@ export default function ApolloSearchPage() {
         // Reload saved lists
         await loadSavedLists();
       } else {
-        // Email not available - don't mark as unavailable so user can retry
-        console.log("Email not available for this contact in Apollo - user can retry");
+        // Email not available - log debug info
+        console.log("Email not available for this contact in Apollo - user can retry", {
+          source: data.source,
+          creditsUsed: data.creditsUsed,
+          debug: data.debug,
+          error: data.error,
+        });
       }
     } catch (error) {
       console.error("Error purchasing email for list contact:", error);
@@ -1142,8 +1147,13 @@ export default function ApolloSearchPage() {
         // Reload saved lists
         await loadSavedLists();
       } else {
-        // Phone not available - don't mark as unavailable so user can retry
-        console.log("Phone not available for this contact in Apollo - user can retry");
+        // Phone not available - log debug info
+        console.log("Phone not available for this contact in Apollo - user can retry", {
+          source: data.source,
+          creditsUsed: data.creditsUsed,
+          debug: data.debug,
+          error: data.error,
+        });
       }
     } catch (error) {
       console.error("Error purchasing phone for list contact:", error);
