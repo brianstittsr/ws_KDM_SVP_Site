@@ -307,7 +307,51 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // SECOND: Try Apollo's people/match endpoint with reveal flags
+        // SECOND: Try Apollo's people/enrich endpoint (consumes credits to reveal data)
+        if (firstName && lastName && company) {
+          const enrichBody: Record<string, unknown> = {
+            first_name: firstName,
+            last_name: lastName,
+            organization_name: company,
+            reveal_personal_emails: true,
+            reveal_phone_number: true,
+          };
+          
+          if (linkedIn) {
+            enrichBody.linkedin_url = linkedIn;
+          }
+
+          console.log("Calling Apollo people/enrich with:", JSON.stringify(enrichBody, null, 2));
+
+          const response = await fetch(`${APOLLO_API_BASE}/people/enrich`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(enrichBody),
+          });
+
+          const data = await response.json();
+          console.log("Apollo people/enrich response:", JSON.stringify(data, null, 2));
+
+          if (response.ok && data.person) {
+            const email = extractEmail(data.person);
+            
+            return NextResponse.json({
+              connected: true,
+              email,
+              person: data.person,
+              source: "people_enrich",
+              creditsUsed: true,
+              debug: { 
+                hasEmail: !!data.person.email, 
+                hasPersonalEmails: data.person.personal_emails?.length > 0,
+                emailValue: data.person.email,
+                personalEmails: data.person.personal_emails,
+              }
+            });
+          }
+        }
+        
+        // THIRD: Try Apollo's people/match endpoint as fallback
         if (firstName && lastName && company) {
           const matchBody: Record<string, unknown> = {
             first_name: firstName,
@@ -451,7 +495,50 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // SECOND: Try Apollo's people/match endpoint with reveal flags
+        // SECOND: Try Apollo's people/enrich endpoint (consumes credits to reveal data)
+        if (firstName && lastName && company) {
+          const enrichBody: Record<string, unknown> = {
+            first_name: firstName,
+            last_name: lastName,
+            organization_name: company,
+            reveal_phone_number: true,
+            reveal_personal_emails: true,
+          };
+          
+          if (linkedIn) {
+            enrichBody.linkedin_url = linkedIn;
+          }
+
+          console.log("Calling Apollo people/enrich for phone with:", JSON.stringify(enrichBody, null, 2));
+
+          const response = await fetch(`${APOLLO_API_BASE}/people/enrich`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(enrichBody),
+          });
+
+          const data = await response.json();
+          console.log("Apollo people/enrich for phone response:", JSON.stringify(data, null, 2));
+
+          if (response.ok && data.person) {
+            const phone = extractPhone(data.person);
+            
+            return NextResponse.json({
+              connected: true,
+              phone,
+              person: data.person,
+              source: "people_enrich",
+              creditsUsed: true,
+              debug: {
+                phoneNumbers: data.person.phone_numbers,
+                mobilePhone: data.person.mobile_phone,
+                corporatePhone: data.person.corporate_phone,
+              }
+            });
+          }
+        }
+        
+        // THIRD: Try Apollo's people/match endpoint as fallback
         if (firstName && lastName && company) {
           const matchBody: Record<string, unknown> = {
             first_name: firstName,
