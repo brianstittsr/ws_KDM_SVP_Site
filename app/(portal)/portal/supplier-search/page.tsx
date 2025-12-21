@@ -170,7 +170,7 @@ export default function SupplierSearchPage() {
   const generateMessageId = () => `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
   // Search suppliers via API
-  const searchSuppliers = async (query: string, region?: string): Promise<{ results: SupplierResult[]; message: string }> => {
+  const searchSuppliers = async (query: string, region?: string): Promise<{ results: SupplierResult[]; message: string; total: number; isLiveData?: boolean }> => {
     try {
       const response = await fetch("/api/thomasnet", {
         method: "POST",
@@ -190,12 +190,14 @@ export default function SupplierSearchPage() {
         return {
           results: data.results || [],
           message: data.interpretation || `Found ${data.total} suppliers`,
+          total: data.total || data.results?.length || 0,
+          isLiveData: data.isLiveData,
         };
       }
-      return { results: [], message: "Search failed. Please try again." };
+      return { results: [], message: "Search failed. Please try again.", total: 0 };
     } catch (error) {
       console.error("Search error:", error);
-      return { results: [], message: "Search failed. Please try again." };
+      return { results: [], message: "Search failed. Please try again.", total: 0 };
     }
   };
 
@@ -276,13 +278,16 @@ export default function SupplierSearchPage() {
     setIsLoading(true);
 
     try {
-      const { results, message } = await searchSuppliers(query, regionFilter);
+      const { results, message, total, isLiveData } = await searchSuppliers(query, regionFilter);
 
+      const liveDataNote = isLiveData ? "\n\n*Data sourced from ThomasNet.com*" : "";
+      const totalNote = total > results.length ? `\n\nShowing ${results.length} of ${total.toLocaleString()} total results.` : "";
+      
       const responseMessage: ChatMessage = {
         id: generateMessageId(),
         role: "assistant",
         content: results.length > 0
-          ? `✅ ${message}\n\nI found **${results.length} suppliers** matching your criteria. You can save them to a list or click on any supplier to view details.`
+          ? `✅ ${message}\n\nI found **${total.toLocaleString()} suppliers** matching your criteria. You can save them to a list or click on any supplier to view details.${totalNote}${liveDataNote}`
           : `🔍 ${message}\n\nTry adjusting your search terms or browse by category.`,
         timestamp: new Date(),
         results: results.length > 0 ? results : undefined,

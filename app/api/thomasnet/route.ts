@@ -1,5 +1,108 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// Scrape suppliers from ThomasNet search
+async function scrapeThomosNetSearch(query: string, page: number = 1): Promise<{ suppliers: SupplierResult[]; totalResults: number }> {
+  try {
+    // Build ThomasNet search URL
+    const searchUrl = `https://www.thomasnet.com/suppliers/search?searchterm=${encodeURIComponent(query)}&search_type=search-suppliers&ref=search`;
+    
+    console.log("Fetching ThomasNet search:", searchUrl);
+    
+    const response = await fetch(searchUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+      },
+    });
+
+    if (!response.ok) {
+      console.log("ThomasNet fetch failed:", response.status);
+      return { suppliers: [], totalResults: 0 };
+    }
+
+    const html = await response.text();
+    
+    // Parse the HTML to extract supplier data
+    const suppliers: SupplierResult[] = [];
+    let totalResults = 0;
+    
+    // Extract total results count
+    const totalMatch = html.match(/Displaying\s+[\d,]+\s+-\s+[\d,]+\s+of\s+([\d,]+)\s+results/i);
+    if (totalMatch) {
+      totalResults = parseInt(totalMatch[1].replace(/,/g, ""), 10);
+    }
+    
+    // Extract supplier cards using regex patterns
+    // Look for supplier listing patterns in the HTML
+    const supplierPattern = /<div[^>]*class="[^"]*supplier-result[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/gi;
+    const companyNamePattern = /<a[^>]*class="[^"]*profile-card__title[^"]*"[^>]*>([^<]+)<\/a>/gi;
+    const locationPattern = /<span[^>]*class="[^"]*profile-card__location[^"]*"[^>]*>([^<]+)<\/span>/gi;
+    const descriptionPattern = /<p[^>]*class="[^"]*profile-card__description[^"]*"[^>]*>([\s\S]*?)<\/p>/gi;
+    
+    // Alternative simpler pattern - look for company names in profile links
+    const profileLinkPattern = /<a[^>]*href="(\/profile\/[^"]+)"[^>]*>([^<]+)<\/a>/gi;
+    let match;
+    let id = 1;
+    
+    while ((match = profileLinkPattern.exec(html)) !== null && suppliers.length < 25) {
+      const profileUrl = match[1];
+      const companyName = match[2].trim();
+      
+      // Skip if it's not a company name (too short or contains certain keywords)
+      if (companyName.length < 3 || companyName.toLowerCase().includes("view") || companyName.toLowerCase().includes("click")) {
+        continue;
+      }
+      
+      // Check if we already have this company
+      if (suppliers.some(s => s.companyName === companyName)) {
+        continue;
+      }
+      
+      suppliers.push({
+        id: `tn-live-${id++}`,
+        companyName,
+        thomasnetUrl: `https://www.thomasnet.com${profileUrl}`,
+        description: "",
+        location: "",
+      });
+    }
+    
+    // If regex didn't work well, try JSON-LD structured data
+    const jsonLdPattern = /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi;
+    while ((match = jsonLdPattern.exec(html)) !== null) {
+      try {
+        const jsonData = JSON.parse(match[1]);
+        if (jsonData["@type"] === "ItemList" && jsonData.itemListElement) {
+          for (const item of jsonData.itemListElement) {
+            if (item.item && item.item.name && suppliers.length < 25) {
+              const existing = suppliers.find(s => s.companyName === item.item.name);
+              if (!existing) {
+                suppliers.push({
+                  id: `tn-live-${id++}`,
+                  companyName: item.item.name,
+                  thomasnetUrl: item.item.url || "",
+                  description: item.item.description || "",
+                  location: item.item.address?.addressLocality ? 
+                    `${item.item.address.addressLocality}, ${item.item.address.addressRegion || ""}` : "",
+                });
+              }
+            }
+          }
+        }
+      } catch {
+        // JSON parse failed, continue
+      }
+    }
+    
+    console.log(`Scraped ${suppliers.length} suppliers from ThomasNet, total available: ${totalResults}`);
+    return { suppliers, totalResults };
+  } catch (error) {
+    console.error("Error scraping ThomasNet:", error);
+    return { suppliers: [], totalResults: 0 };
+  }
+}
+
 // State name to abbreviation mapping
 const STATE_MAP: Record<string, string> = {
   "alabama": "al", "alaska": "ak", "arizona": "az", "arkansas": "ar", "california": "ca",
@@ -532,24 +635,39 @@ export async function POST(request: NextRequest) {
           });
         }
         
-        // Parse and search
-        const parsed = parseSearchQuery(query);
+        // Try to scrape real data from ThomasNet first
+        const { suppliers: liveSuppliers, totalResults } = await scrapeThomosNetSearch(query);
         
-        // Apply region filter if specified
-        let results = searchSuppliers(parsed);
+        let results: SupplierResult[];
+        let total: number;
         
-        if (region && region !== "all") {
+        if (liveSuppliers.length > 0) {
+          // Use live data from ThomasNet
+          results = liveSuppliers;
+          total = totalResults;
+          console.log(`Using ${results.length} live suppliers from ThomasNet (${total} total available)`);
+        } else {
+          // Fall back to mock data if scraping fails
+          const parsed = parseSearchQuery(query);
+          results = searchSuppliers(parsed);
+          total = results.length;
+          console.log(`Falling back to ${results.length} mock suppliers`);
+        }
+        
+        // Apply region filter if specified (only works with mock data that has state info)
+        if (region && region !== "all" && liveSuppliers.length === 0) {
           results = filterByRegion(results, region);
         }
         
         // Generate AI response
         const regionLabel = region && region !== "all" ? ` in ${region}` : "";
         const aiResponse = {
-          interpretation: `Searching for ${parsed.keywords || "suppliers"}${parsed.location ? ` in ${parsed.location}` : ""}${regionLabel}.`,
+          interpretation: `Searching for ${query}${regionLabel}.`,
           results,
-          total: results.length,
+          total,
+          isLiveData: liveSuppliers.length > 0,
           refinementSuggestions: [
-            results.length > 10 ? "Add a location to narrow results" : null,
+            total > 25 ? `Showing 25 of ${total.toLocaleString()} results - add filters to narrow` : null,
             results.length === 0 ? "Try broader search terms" : null,
             "Filter by certification (ISO, AS9100, etc.)",
             "Specify employee count or company size",
