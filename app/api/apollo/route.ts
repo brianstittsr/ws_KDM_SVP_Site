@@ -223,7 +223,7 @@ export async function POST(request: NextRequest) {
       }
 
       case "reveal_email": {
-        // Reveal email for a specific person using Apollo's people/match endpoint
+        // Reveal email for a specific person
         const personId = searchParams?.personId;
         const firstName = searchParams?.firstName;
         const lastName = searchParams?.lastName;
@@ -237,7 +237,7 @@ export async function POST(request: NextRequest) {
           email.includes("@domain.com") ||
           email === "email@domain.com";
 
-        // Helper to extract email from person object
+        // Helper to extract email from person/contact object
         const extractEmail = (person: Record<string, unknown>): string | null => {
           // Check primary email
           if (person.email && !isPlaceholder(person.email as string)) {
@@ -260,37 +260,54 @@ export async function POST(request: NextRequest) {
           return null;
         };
 
-        // Try Apollo's people/enrich endpoint first (uses credits but reveals data)
-        if (personId) {
+        // FIRST: Search Apollo's saved contacts (already unlocked data)
+        // This searches contacts that have been added to the user's Apollo database
+        if (firstName && lastName) {
           try {
-            const enrichResponse = await fetch(`${APOLLO_API_BASE}/people/enrich`, {
+            const contactSearchResponse = await fetch(`${APOLLO_API_BASE}/contacts/search`, {
               method: "POST",
               headers,
               body: JSON.stringify({
-                id: personId,
-                reveal_personal_emails: true,
+                q_keywords: `${firstName} ${lastName}`,
+                per_page: 10,
               }),
             });
 
-            const enrichData = await enrichResponse.json();
-            console.log("Apollo enrich response:", JSON.stringify(enrichData, null, 2));
+            const contactSearchData = await contactSearchResponse.json();
+            console.log("Apollo contacts/search response:", JSON.stringify(contactSearchData, null, 2));
 
-            if (enrichResponse.ok && enrichData.person) {
-              const email = extractEmail(enrichData.person);
-              if (email) {
-                return NextResponse.json({
-                  connected: true,
-                  email,
-                  person: enrichData.person,
-                });
+            if (contactSearchResponse.ok && contactSearchData.contacts?.length > 0) {
+              // Find the matching contact by name and company
+              const matchingContact = contactSearchData.contacts.find((c: Record<string, unknown>) => {
+                const contactName = `${c.first_name || ""} ${c.last_name || ""}`.toLowerCase().trim();
+                const searchName = `${firstName} ${lastName}`.toLowerCase().trim();
+                const org = c.organization as Record<string, unknown> | undefined;
+                const contactCompany = ((c.organization_name || org?.name || "") as string).toLowerCase();
+                const searchCompany = (company || "").toLowerCase();
+                
+                return contactName === searchName && 
+                       (contactCompany.includes(searchCompany) || searchCompany.includes(contactCompany));
+              });
+
+              if (matchingContact) {
+                const email = extractEmail(matchingContact);
+                if (email) {
+                  console.log("Found email in saved contacts:", email);
+                  return NextResponse.json({
+                    connected: true,
+                    email,
+                    person: matchingContact,
+                    source: "saved_contacts",
+                  });
+                }
               }
             }
           } catch (err) {
-            console.log("Enrich endpoint failed, trying match endpoint");
+            console.log("Contacts search failed, trying other methods:", err);
           }
         }
 
-        // Primary approach: Use people/match with name and company
+        // SECOND: Try Apollo's people/match endpoint with reveal flags
         if (firstName && lastName && company) {
           const matchBody: Record<string, unknown> = {
             first_name: firstName,
@@ -300,7 +317,6 @@ export async function POST(request: NextRequest) {
             reveal_phone_number: true,
           };
           
-          // Add LinkedIn if available for better matching
           if (linkedIn) {
             matchBody.linkedin_url = linkedIn;
           }
@@ -312,7 +328,7 @@ export async function POST(request: NextRequest) {
           });
 
           const data = await response.json();
-          console.log("Apollo reveal_email match response:", JSON.stringify(data, null, 2));
+          console.log("Apollo people/match response:", JSON.stringify(data, null, 2));
 
           if (response.ok && data.person) {
             const email = extractEmail(data.person);
@@ -321,6 +337,7 @@ export async function POST(request: NextRequest) {
               connected: true,
               email,
               person: data.person,
+              source: "people_match",
               debug: { 
                 hasEmail: !!data.person.email, 
                 hasPersonalEmails: data.person.personal_emails?.length > 0,
@@ -331,7 +348,7 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Fallback: Try with LinkedIn URL if available
+        // THIRD: Try with LinkedIn URL if available
         if (linkedIn) {
           const linkedInResponse = await fetch(`${APOLLO_API_BASE}/people/match`, {
             method: "POST",
@@ -351,6 +368,7 @@ export async function POST(request: NextRequest) {
               connected: true,
               email,
               person: linkedInData.person,
+              source: "linkedin_match",
             });
           }
         }
@@ -362,7 +380,7 @@ export async function POST(request: NextRequest) {
       }
 
       case "reveal_phone": {
-        // Reveal phone for a specific person using Apollo's people/match endpoint
+        // Reveal phone for a specific person
         const personId = searchParams?.personId;
         const firstName = searchParams?.firstName;
         const lastName = searchParams?.lastName;
@@ -383,40 +401,57 @@ export async function POST(request: NextRequest) {
           if (person.mobile_phone) return person.mobile_phone as string;
           if (person.corporate_phone) return person.corporate_phone as string;
           if (person.direct_phone) return person.direct_phone as string;
+          if (person.phone) return person.phone as string;
           return null;
         };
 
-        // Try Apollo's people/enrich endpoint first (uses credits but reveals data)
-        if (personId) {
+        // FIRST: Search Apollo's saved contacts (already unlocked data)
+        if (firstName && lastName) {
           try {
-            const enrichResponse = await fetch(`${APOLLO_API_BASE}/people/enrich`, {
+            const contactSearchResponse = await fetch(`${APOLLO_API_BASE}/contacts/search`, {
               method: "POST",
               headers,
               body: JSON.stringify({
-                id: personId,
-                reveal_phone_number: true,
+                q_keywords: `${firstName} ${lastName}`,
+                per_page: 10,
               }),
             });
 
-            const enrichData = await enrichResponse.json();
-            console.log("Apollo phone enrich response:", JSON.stringify(enrichData, null, 2));
+            const contactSearchData = await contactSearchResponse.json();
+            console.log("Apollo contacts/search for phone:", JSON.stringify(contactSearchData, null, 2));
 
-            if (enrichResponse.ok && enrichData.person) {
-              const phone = extractPhone(enrichData.person);
-              if (phone) {
-                return NextResponse.json({
-                  connected: true,
-                  phone,
-                  person: enrichData.person,
-                });
+            if (contactSearchResponse.ok && contactSearchData.contacts?.length > 0) {
+              // Find the matching contact by name and company
+              const matchingContact = contactSearchData.contacts.find((c: Record<string, unknown>) => {
+                const contactName = `${c.first_name || ""} ${c.last_name || ""}`.toLowerCase().trim();
+                const searchName = `${firstName} ${lastName}`.toLowerCase().trim();
+                const org = c.organization as Record<string, unknown> | undefined;
+                const contactCompany = ((c.organization_name || org?.name || "") as string).toLowerCase();
+                const searchCompany = (company || "").toLowerCase();
+                
+                return contactName === searchName && 
+                       (contactCompany.includes(searchCompany) || searchCompany.includes(contactCompany));
+              });
+
+              if (matchingContact) {
+                const phone = extractPhone(matchingContact);
+                if (phone) {
+                  console.log("Found phone in saved contacts:", phone);
+                  return NextResponse.json({
+                    connected: true,
+                    phone,
+                    person: matchingContact,
+                    source: "saved_contacts",
+                  });
+                }
               }
             }
           } catch (err) {
-            console.log("Enrich endpoint failed, trying match endpoint");
+            console.log("Contacts search failed, trying other methods:", err);
           }
         }
 
-        // Primary approach: Use people/match with name and company
+        // SECOND: Try Apollo's people/match endpoint with reveal flags
         if (firstName && lastName && company) {
           const matchBody: Record<string, unknown> = {
             first_name: firstName,
@@ -426,7 +461,6 @@ export async function POST(request: NextRequest) {
             reveal_personal_emails: true,
           };
           
-          // Add LinkedIn if available for better matching
           if (linkedIn) {
             matchBody.linkedin_url = linkedIn;
           }
@@ -438,7 +472,7 @@ export async function POST(request: NextRequest) {
           });
 
           const data = await response.json();
-          console.log("Apollo reveal_phone match response:", JSON.stringify(data, null, 2));
+          console.log("Apollo people/match for phone:", JSON.stringify(data, null, 2));
 
           if (response.ok && data.person) {
             const phone = extractPhone(data.person);
@@ -447,6 +481,7 @@ export async function POST(request: NextRequest) {
               connected: true,
               phone,
               person: data.person,
+              source: "people_match",
               debug: {
                 phoneNumbers: data.person.phone_numbers,
                 mobilePhone: data.person.mobile_phone,
@@ -456,7 +491,7 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Fallback: Try with LinkedIn URL if available
+        // THIRD: Try with LinkedIn URL if available
         if (linkedIn) {
           const linkedInResponse = await fetch(`${APOLLO_API_BASE}/people/match`, {
             method: "POST",
@@ -476,6 +511,7 @@ export async function POST(request: NextRequest) {
               connected: true,
               phone,
               person: linkedInData.person,
+              source: "linkedin_match",
             });
           }
         }
