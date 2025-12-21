@@ -287,33 +287,22 @@ export async function POST(request: NextRequest) {
             }
 
             if (contactSearchResponse.ok && contactSearchData.contacts?.length > 0) {
-              // Find the matching contact by name (relaxed matching - just check name match)
+              // Find the matching contact by name only (company matching is unreliable)
               const matchingContact = contactSearchData.contacts.find((c: Record<string, unknown>) => {
                 const contactFirstName = ((c.first_name || "") as string).toLowerCase().trim();
                 const contactLastName = ((c.last_name || "") as string).toLowerCase().trim();
                 const searchFirstName = (firstName || "").toLowerCase().trim();
                 const searchLastName = (lastName || "").toLowerCase().trim();
                 
-                // Match if first and last name match
-                const nameMatch = contactFirstName === searchFirstName && contactLastName === searchLastName;
-                
-                // Optionally also check company if provided - but be lenient
-                if (company && nameMatch) {
-                  const org = c.organization as Record<string, unknown> | undefined;
-                  const contactCompany = ((c.organization_name || org?.name || "") as string).toLowerCase();
-                  const searchCompany = company.toLowerCase();
-                  // If company matches or contact has no company, accept the match
-                  const companyMatch = !contactCompany || contactCompany.includes(searchCompany) || searchCompany.includes(contactCompany);
-                  return companyMatch;
-                }
-                
-                return nameMatch;
+                // Match if first and last name match - company matching is too unreliable
+                return contactFirstName === searchFirstName && contactLastName === searchLastName;
               });
 
               if (matchingContact) {
                 const email = extractEmail(matchingContact);
                 console.log("Found matching contact in Apollo saved contacts:", {
                   name: `${matchingContact.first_name} ${matchingContact.last_name}`,
+                  company: matchingContact.organization_name,
                   email: email,
                   hasEmail: !!email,
                 });
@@ -502,41 +491,36 @@ export async function POST(request: NextRequest) {
             }
 
             if (contactSearchResponse.ok && contactSearchData.contacts?.length > 0) {
-              // Find the matching contact by name (relaxed matching)
+              // Find the matching contact by name only (company matching is unreliable)
               const matchingContact = contactSearchData.contacts.find((c: Record<string, unknown>) => {
                 const contactFirstName = ((c.first_name || "") as string).toLowerCase().trim();
                 const contactLastName = ((c.last_name || "") as string).toLowerCase().trim();
                 const searchFirstName = (firstName || "").toLowerCase().trim();
                 const searchLastName = (lastName || "").toLowerCase().trim();
                 
-                // Match if first and last name match
-                const nameMatch = contactFirstName === searchFirstName && contactLastName === searchLastName;
-                
-                // Optionally also check company if provided - but be lenient
-                if (company && nameMatch) {
-                  const org = c.organization as Record<string, unknown> | undefined;
-                  const contactCompany = ((c.organization_name || org?.name || "") as string).toLowerCase();
-                  const searchCompany = company.toLowerCase();
-                  // If company matches or contact has no company, accept the match
-                  const companyMatch = !contactCompany || contactCompany.includes(searchCompany) || searchCompany.includes(contactCompany);
-                  return companyMatch;
-                }
-                
-                return nameMatch;
+                // Match if first and last name match - company matching is too unreliable
+                return contactFirstName === searchFirstName && contactLastName === searchLastName;
               });
 
               if (matchingContact) {
                 const phone = extractPhone(matchingContact);
                 console.log("Found matching contact in Apollo saved contacts for phone:", {
                   name: `${matchingContact.first_name} ${matchingContact.last_name}`,
+                  company: matchingContact.organization_name,
                   phone: phone,
                   hasPhone: !!phone,
+                  phoneNumbers: matchingContact.phone_numbers,
+                  sanitizedPhone: matchingContact.sanitized_phone,
                 });
-                if (phone) {
-                  console.log("Returning phone from saved contacts (no credits used):", phone);
+                
+                // Also check sanitized_phone field which Apollo uses
+                const finalPhone = phone || (matchingContact.sanitized_phone as string);
+                
+                if (finalPhone) {
+                  console.log("Returning phone from saved contacts (no credits used):", finalPhone);
                   return NextResponse.json({
                     connected: true,
-                    phone,
+                    phone: finalPhone,
                     person: matchingContact,
                     source: "saved_contacts",
                     creditsUsed: false,
