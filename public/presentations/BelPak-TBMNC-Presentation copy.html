@@ -113,17 +113,53 @@
         
         /* BelPak × Toyota Battery NC Partnership Animated Background */
         
-        /* Title Slide */
+        /* Title Slide - Blue to Red Gradient Transition (BelPak to Toyota) */
         .slide.title-slide {
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             text-align: center;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f0f23 100%);
+            background: linear-gradient(135deg, 
+                #1a365d 0%,           /* BelPak deep blue */
+                #2c5282 20%,          /* BelPak medium blue */
+                #4a5568 40%,          /* Transition gray */
+                #742a2a 60%,          /* Dark red transition */
+                #c53030 80%,          /* Toyota red */
+                #eb0a1e 100%          /* Toyota bright red */
+            );
             color: white;
             position: relative;
             overflow: hidden;
+        }
+        
+        /* Animated gradient overlay for smooth transition effect */
+        .slide.title-slide::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(
+                45deg,
+                rgba(26, 54, 93, 0.3) 0%,
+                transparent 50%,
+                rgba(235, 10, 30, 0.3) 100%
+            );
+            animation: gradientShift 8s ease-in-out infinite alternate;
+            pointer-events: none;
+        }
+        
+        @keyframes gradientShift {
+            0% {
+                opacity: 0.3;
+                transform: translateX(-5%);
+            }
+            100% {
+                opacity: 0.6;
+                transform: translateX(5%);
+            }
         }
         
         /* Partnership Background Container */
