@@ -947,6 +947,53 @@ export interface ThomasNetSavedListDoc {
 }
 
 // ============================================================================
+// TBMNC Supplier Readiness Types
+// ============================================================================
+
+export type SupplierReadinessStageId =
+  | "registration"
+  | "documentation"
+  | "assessment"
+  | "quality"
+  | "audit"
+  | "corrective"
+  | "approved";
+
+export type SupplierDeliverableStatus = "not-started" | "pending-review" | "approved" | "rejected";
+
+export interface SupplierDeliverableItem {
+  id: string;
+  status: SupplierDeliverableStatus;
+  updatedAt?: Timestamp;
+}
+
+export interface SupplierDeliverablesSummary {
+  completed: number;
+  total: number;
+  items?: SupplierDeliverableItem[];
+}
+
+export interface TBMNCSupplierDoc {
+  id: string;
+  companyName: string;
+  contactName: string;
+  contactEmail: string;
+  contactPhone?: string;
+  location?: string;
+  website?: string;
+  stage: SupplierReadinessStageId;
+  progress: number;
+  assignedAffiliateIds: string[];
+  capabilities: string[];
+  certifications: string[];
+  registrationDate?: Timestamp;
+  lastActivity?: Timestamp;
+  deliverables: SupplierDeliverablesSummary;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+// ============================================================================
 // GoHighLevel Integration Types
 // ============================================================================
 
@@ -1451,6 +1498,8 @@ export const COLLECTIONS = {
   THOMASNET_SAVED_SUPPLIERS: "thomasnetSavedSuppliers",
   // ThomasNet Saved Lists
   THOMASNET_SAVED_LISTS: "thomasnetSavedLists",
+  // TBMNC Supplier Readiness
+  TBMNC_SUPPLIERS: "tbmncSuppliers",
   // Traction/EOS Collections
   TRACTION_ROCKS: "tractionRocks",
   TRACTION_SCORECARD_METRICS: "tractionScorecardMetrics",
@@ -1527,6 +1576,8 @@ export const oneToOneMeetingsCollection = () => getCollection<OneToOneMeetingDoc
 export const referralsCollection = () => getCollection<ReferralDoc>(COLLECTIONS.REFERRALS);
 export const affiliateStatsCollection = () => getCollection<AffiliateStatsDoc>(COLLECTIONS.AFFILIATE_STATS);
 export const aiMatchSuggestionsCollection = () => getCollection<AiMatchSuggestionDoc>(COLLECTIONS.AI_MATCH_SUGGESTIONS);
+
+export const tbmncSuppliersCollection = () => getCollection<TBMNCSupplierDoc>(COLLECTIONS.TBMNC_SUPPLIERS);
 
 // Strategic Partners collection reference
 export const strategicPartnersCollection = () => getCollection<StrategicPartnerDoc>(COLLECTIONS.STRATEGIC_PARTNERS);

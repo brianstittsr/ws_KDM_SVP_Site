@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -74,6 +74,14 @@ import {
   Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { db } from "@/lib/firebase";
+import { arrayUnion, collection, getDocs, doc, updateDoc, Timestamp } from "firebase/firestore";
+import {
+  COLLECTIONS,
+  type SupplierReadinessStageId,
+  type TBMNCSupplierDoc,
+  type TeamMemberDoc,
+} from "@/lib/schema";
 
 // Supplier readiness stages based on typical OEM qualification process
 const supplierStages = [
@@ -142,133 +150,13 @@ const deliverableCategories = [
 ];
 
 // Mock suppliers data
-const mockSuppliers = [
-  {
-    id: "1",
-    companyName: "Precision Components Inc.",
-    contactName: "John Martinez",
-    contactEmail: "jmartinez@precisioncomp.com",
-    contactPhone: "(336) 555-0123",
-    location: "Greensboro, NC",
-    website: "www.precisioncomp.com",
-    stage: "quality",
-    progress: 65,
-    assignedAffiliates: ["Sarah Chen", "Michael Rodriguez"],
-    capabilities: ["CNC Machining", "Metal Stamping", "Assembly"],
-    certifications: ["ISO 9001"],
-    registrationDate: "2024-10-15",
-    lastActivity: "2024-12-05",
-    deliverables: {
-      completed: 12,
-      total: 21,
-      items: [
-        { id: "d1", status: "approved" },
-        { id: "d2", status: "approved" },
-        { id: "d3", status: "pending-review" },
-        { id: "d5", status: "approved" },
-        { id: "d6", status: "not-started" },
-      ],
-    },
-  },
-  {
-    id: "2",
-    companyName: "Carolina Battery Solutions",
-    contactName: "Lisa Thompson",
-    contactEmail: "lthompson@carolinabattery.com",
-    contactPhone: "(919) 555-0456",
-    location: "Raleigh, NC",
-    website: "www.carolinabattery.com",
-    stage: "assessment",
-    progress: 40,
-    assignedAffiliates: ["Jennifer Park"],
-    capabilities: ["Battery Assembly", "Testing", "Pack Integration"],
-    certifications: ["ISO 9001", "ISO 14001"],
-    registrationDate: "2024-11-01",
-    lastActivity: "2024-12-07",
-    deliverables: {
-      completed: 8,
-      total: 21,
-      items: [],
-    },
-  },
-  {
-    id: "3",
-    companyName: "Southern Plastics Manufacturing",
-    contactName: "Robert Williams",
-    contactEmail: "rwilliams@southernplastics.com",
-    contactPhone: "(704) 555-0789",
-    location: "Charlotte, NC",
-    website: "www.southernplastics.com",
-    stage: "documentation",
-    progress: 20,
-    assignedAffiliates: [],
-    capabilities: ["Injection Molding", "Blow Molding", "Thermoforming"],
-    certifications: [],
-    registrationDate: "2024-11-20",
-    lastActivity: "2024-12-01",
-    deliverables: {
-      completed: 4,
-      total: 21,
-      items: [],
-    },
-  },
-  {
-    id: "4",
-    companyName: "Triad Metal Works",
-    contactName: "Amanda Chen",
-    contactEmail: "achen@triadmetal.com",
-    contactPhone: "(336) 555-0321",
-    location: "Winston-Salem, NC",
-    website: "www.triadmetal.com",
-    stage: "audit",
-    progress: 80,
-    assignedAffiliates: ["Sarah Chen", "David Thompson"],
-    capabilities: ["Sheet Metal Fabrication", "Welding", "Powder Coating"],
-    certifications: ["ISO 9001", "IATF 16949"],
-    registrationDate: "2024-09-01",
-    lastActivity: "2024-12-06",
-    deliverables: {
-      completed: 18,
-      total: 21,
-      items: [],
-    },
-  },
-  {
-    id: "5",
-    companyName: "Piedmont Electronics",
-    contactName: "David Kim",
-    contactEmail: "dkim@piedmontelec.com",
-    contactPhone: "(336) 555-0654",
-    location: "High Point, NC",
-    website: "www.piedmontelec.com",
-    stage: "approved",
-    progress: 100,
-    assignedAffiliates: ["Michael Rodriguez", "Jennifer Park"],
-    capabilities: ["PCB Assembly", "Wire Harness", "Electronic Testing"],
-    certifications: ["ISO 9001", "IATF 16949", "ISO 14001"],
-    registrationDate: "2024-07-15",
-    lastActivity: "2024-11-28",
-    deliverables: {
-      completed: 21,
-      total: 21,
-      items: [],
-    },
-  },
-];
 
-// Mock affiliates for assignment
-const availableAffiliates = [
-  { id: "1", name: "Sarah Chen", expertise: ["Lean Manufacturing", "ISO 9001"], available: true },
-  { id: "2", name: "Michael Rodriguez", expertise: ["IATF 16949", "Quality Auditing"], available: true },
-  { id: "3", name: "Jennifer Park", expertise: ["Digital Transformation", "Industry 4.0"], available: false },
-  { id: "4", name: "David Thompson", expertise: ["Financial Analysis", "Cost Accounting"], available: true },
-  { id: "5", name: "Lisa Wang", expertise: ["Supply Chain", "Logistics"], available: true },
-];
+type TBMNCSupplier = Omit<TBMNCSupplierDoc, "id"> & { id: string };
 
 export default function TBMNCSupplierReadinessPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [stageFilter, setStageFilter] = useState<string | null>(null);
-  const [selectedSupplier, setSelectedSupplier] = useState<typeof mockSuppliers[0] | null>(null);
+  const [selectedSupplier, setSelectedSupplier] = useState<TBMNCSupplier | null>(null);
   const [isAddSupplierOpen, setIsAddSupplierOpen] = useState(false);
   const [isAssignAffiliateOpen, setIsAssignAffiliateOpen] = useState(false);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
@@ -279,6 +167,46 @@ export default function TBMNCSupplierReadinessPage() {
   const [emailSubject, setEmailSubject] = useState("TBMNC Supplier Registration Form");
   const [emailMessage, setEmailMessage] = useState("Please find attached the TBMNC Supplier Registration Form. Complete this form and return it to begin the supplier qualification process.");
   const [isSendingEmail, setIsSendingEmail] = useState(false);
+
+  const [suppliers, setSuppliers] = useState<TBMNCSupplier[]>([]);
+  const [affiliates, setAffiliates] = useState<TeamMemberDoc[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadData = async () => {
+      if (!db) {
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const [supplierSnap, memberSnap] = await Promise.all([
+          getDocs(collection(db, COLLECTIONS.TBMNC_SUPPLIERS)),
+          getDocs(collection(db, COLLECTIONS.TEAM_MEMBERS)),
+        ]);
+
+        const supplierRows: TBMNCSupplier[] = [];
+        supplierSnap.forEach((d) => {
+          supplierRows.push({ id: d.id, ...(d.data() as Omit<TBMNCSupplierDoc, "id">) });
+        });
+
+        const memberRows: TeamMemberDoc[] = [];
+        memberSnap.forEach((d) => {
+          memberRows.push({ id: d.id, ...(d.data() as Omit<TeamMemberDoc, "id">) } as TeamMemberDoc);
+        });
+
+        setSuppliers(supplierRows);
+        setAffiliates(memberRows);
+      } catch (error) {
+        console.error("Error loading TBMNC data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
 
   // Generate PDF of the Registration Wizard
   const generateRegistrationPdf = async () => {
@@ -472,13 +400,13 @@ export default function TBMNCSupplierReadinessPage() {
     }
   };
 
-  const filteredSuppliers = mockSuppliers.filter((supplier) => {
+  const filteredSuppliers = useMemo(() => suppliers.filter((supplier) => {
     const matchesSearch =
       supplier.companyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       supplier.contactName.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStage = !stageFilter || supplier.stage === stageFilter;
     return matchesSearch && matchesStage;
-  });
+  }), [suppliers, searchQuery, stageFilter]);
 
   const getStageInfo = (stageId: string) => {
     return supplierStages.find((s) => s.id === stageId) || supplierStages[0];
@@ -490,11 +418,71 @@ export default function TBMNCSupplierReadinessPage() {
     return Math.round((stage.order / supplierStages.length) * 100);
   };
 
+  const affiliatesForAssignment = useMemo(
+    () => affiliates.filter((m) => m.role === "affiliate" && m.status === "active"),
+    [affiliates]
+  );
+
+  const affiliateNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    affiliatesForAssignment.forEach((m) => map.set(m.id, `${m.firstName} ${m.lastName}`.trim()));
+    return map;
+  }, [affiliatesForAssignment]);
+
   // Stats
-  const totalSuppliers = mockSuppliers.length;
-  const approvedSuppliers = mockSuppliers.filter((s) => s.stage === "approved").length;
-  const inProgressSuppliers = mockSuppliers.filter((s) => !["approved", "registration"].includes(s.stage)).length;
-  const needsAttention = mockSuppliers.filter((s) => s.assignedAffiliates.length === 0 && s.stage !== "approved").length;
+  const totalSuppliers = suppliers.length;
+  const approvedSuppliers = suppliers.filter((s) => s.stage === "approved").length;
+  const inProgressSuppliers = suppliers.filter((s) => !(["approved", "registration"] as SupplierReadinessStageId[]).includes(s.stage)).length;
+  const needsAttention = suppliers.filter((s) => s.assignedAffiliateIds.length === 0 && s.stage !== "approved").length;
+
+  const formatMaybeTimestamp = (ts?: Timestamp) => {
+    if (!ts) return "";
+    return ts.toDate().toLocaleDateString();
+  };
+
+  const assignAffiliateToSelectedSupplier = async (affiliateId: string) => {
+    if (!db || !selectedSupplier) return;
+    try {
+      await updateDoc(doc(db, COLLECTIONS.TBMNC_SUPPLIERS, selectedSupplier.id), {
+        assignedAffiliateIds: arrayUnion(affiliateId),
+        updatedAt: Timestamp.now(),
+        lastActivity: Timestamp.now(),
+      });
+
+      setSuppliers((prev) =>
+        prev.map((s) =>
+          s.id === selectedSupplier.id
+            ? {
+                ...s,
+                assignedAffiliateIds: s.assignedAffiliateIds.includes(affiliateId)
+                  ? s.assignedAffiliateIds
+                  : [...s.assignedAffiliateIds, affiliateId],
+                updatedAt: Timestamp.now(),
+                lastActivity: Timestamp.now(),
+              }
+            : s
+        )
+      );
+
+      setSelectedSupplier((prev) => {
+        if (!prev) return prev;
+        if (prev.id !== selectedSupplier.id) return prev;
+        return {
+          ...prev,
+          assignedAffiliateIds: prev.assignedAffiliateIds.includes(affiliateId)
+            ? prev.assignedAffiliateIds
+            : [...prev.assignedAffiliateIds, affiliateId],
+          updatedAt: Timestamp.now(),
+          lastActivity: Timestamp.now(),
+        };
+      });
+
+      setIsAssignAffiliateOpen(false);
+    } catch (error) {
+      console.error("Error assigning affiliate:", error);
+      alert("Error assigning affiliate. Please try again.");
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -546,7 +534,7 @@ export default function TBMNCSupplierReadinessPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalSuppliers}</div>
+            <div className="text-2xl font-bold">{loading ? "—" : totalSuppliers}</div>
             <p className="text-xs text-muted-foreground">In qualification pipeline</p>
           </CardContent>
         </Card>
@@ -557,7 +545,7 @@ export default function TBMNCSupplierReadinessPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{approvedSuppliers}</div>
+            <div className="text-2xl font-bold text-green-600">{loading ? "—" : approvedSuppliers}</div>
             <p className="text-xs text-muted-foreground">Qualified suppliers</p>
           </CardContent>
         </Card>
@@ -568,7 +556,7 @@ export default function TBMNCSupplierReadinessPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{inProgressSuppliers}</div>
+            <div className="text-2xl font-bold text-blue-600">{loading ? "—" : inProgressSuppliers}</div>
             <p className="text-xs text-muted-foreground">Active qualifications</p>
           </CardContent>
         </Card>
@@ -579,7 +567,7 @@ export default function TBMNCSupplierReadinessPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{needsAttention}</div>
+            <div className="text-2xl font-bold text-yellow-600">{loading ? "—" : needsAttention}</div>
             <p className="text-xs text-muted-foreground">Unassigned suppliers</p>
           </CardContent>
         </Card>
@@ -594,7 +582,7 @@ export default function TBMNCSupplierReadinessPage() {
         <CardContent>
           <div className="flex gap-2 overflow-x-auto pb-4">
             {supplierStages.map((stage) => {
-              const count = mockSuppliers.filter((s) => s.stage === stage.id).length;
+              const count = suppliers.filter((s) => s.stage === stage.id).length;
               return (
                 <div
                   key={stage.id}
@@ -607,7 +595,7 @@ export default function TBMNCSupplierReadinessPage() {
                 >
                   <div className={cn("w-3 h-3 rounded-full mb-2", stage.color)} />
                   <p className="font-medium text-sm">{stage.name}</p>
-                  <p className="text-2xl font-bold">{count}</p>
+                  <p className="text-2xl font-bold">{loading ? "—" : count}</p>
                 </div>
               );
             })}
@@ -703,18 +691,22 @@ export default function TBMNCSupplierReadinessPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          {supplier.assignedAffiliates.length > 0 ? (
+                          {supplier.assignedAffiliateIds.length > 0 ? (
                             <div className="flex -space-x-2">
-                              {supplier.assignedAffiliates.slice(0, 3).map((name, i) => (
+                              {supplier.assignedAffiliateIds
+                                .map((id) => affiliateNameById.get(id))
+                                .filter((n): n is string => !!n)
+                                .slice(0, 3)
+                                .map((name, i) => (
                                 <Avatar key={i} className="h-8 w-8 border-2 border-background">
                                   <AvatarFallback className="text-xs">
                                     {name.split(" ").map((n) => n[0]).join("")}
                                   </AvatarFallback>
                                 </Avatar>
                               ))}
-                              {supplier.assignedAffiliates.length > 3 && (
+                              {supplier.assignedAffiliateIds.length > 3 && (
                                 <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs border-2 border-background">
-                                  +{supplier.assignedAffiliates.length - 3}
+                                  +{supplier.assignedAffiliateIds.length - 3}
                                 </div>
                               )}
                             </div>
@@ -725,7 +717,7 @@ export default function TBMNCSupplierReadinessPage() {
                           )}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {new Date(supplier.lastActivity).toLocaleDateString()}
+                          {formatMaybeTimestamp(supplier.lastActivity)}
                         </TableCell>
                         <TableCell>
                           <DropdownMenu>
@@ -829,9 +821,9 @@ export default function TBMNCSupplierReadinessPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {availableAffiliates.map((affiliate) => {
-                    const assignedSuppliers = mockSuppliers.filter((s) =>
-                      s.assignedAffiliates.includes(affiliate.name)
+                  {affiliatesForAssignment.map((affiliate) => {
+                    const assignedSuppliers = suppliers.filter((s) =>
+                      s.assignedAffiliateIds.includes(affiliate.id)
                     );
                     return (
                       <TableRow key={affiliate.id}>
@@ -839,20 +831,20 @@ export default function TBMNCSupplierReadinessPage() {
                           <div className="flex items-center gap-3">
                             <Avatar>
                               <AvatarFallback>
-                                {affiliate.name.split(" ").map((n) => n[0]).join("")}
+                                {`${affiliate.firstName} ${affiliate.lastName}`
+                                  .trim()
+                                  .split(" ")
+                                  .map((n) => n[0])
+                                  .join("")}
                               </AvatarFallback>
                             </Avatar>
-                            <span className="font-medium">{affiliate.name}</span>
+                            <span className="font-medium">{`${affiliate.firstName} ${affiliate.lastName}`.trim()}</span>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {affiliate.expertise.map((exp) => (
-                              <Badge key={exp} variant="outline" className="text-xs">
-                                {exp}
-                              </Badge>
-                            ))}
-                          </div>
+                          <Badge variant="outline" className="text-xs">
+                            {affiliate.expertise}
+                          </Badge>
                         </TableCell>
                         <TableCell>{assignedSuppliers.length}</TableCell>
                         <TableCell>
@@ -862,8 +854,8 @@ export default function TBMNCSupplierReadinessPage() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={affiliate.available ? "default" : "secondary"}>
-                            {affiliate.available ? "Available" : "Busy"}
+                          <Badge variant="default">
+                            Active
                           </Badge>
                         </TableCell>
                       </TableRow>
@@ -958,17 +950,20 @@ export default function TBMNCSupplierReadinessPage() {
                 <div>
                   <Label className="text-muted-foreground">Assigned Affiliates</Label>
                   <div className="flex flex-wrap gap-2 mt-2">
-                    {selectedSupplier.assignedAffiliates.length > 0 ? (
-                      selectedSupplier.assignedAffiliates.map((name) => (
-                        <div key={name} className="flex items-center gap-2 px-3 py-1 bg-muted rounded-full">
-                          <Avatar className="h-6 w-6">
-                            <AvatarFallback className="text-xs">
-                              {name.split(" ").map((n) => n[0]).join("")}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-sm">{name}</span>
-                        </div>
-                      ))
+                    {selectedSupplier.assignedAffiliateIds.length > 0 ? (
+                      selectedSupplier.assignedAffiliateIds
+                        .map((id) => ({ id, name: affiliateNameById.get(id) }))
+                        .filter((a): a is { id: string; name: string } => !!a.name)
+                        .map(({ id, name }) => (
+                          <div key={id} className="flex items-center gap-2 px-3 py-1 bg-muted rounded-full">
+                            <Avatar className="h-6 w-6">
+                              <AvatarFallback className="text-xs">
+                                {name.split(" ").map((n) => n[0]).join("")}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="text-sm">{name}</span>
+                          </div>
+                        ))
                     ) : (
                       <span className="text-sm text-muted-foreground">No affiliates assigned</span>
                     )}
@@ -1003,32 +998,32 @@ export default function TBMNCSupplierReadinessPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
-            {availableAffiliates.map((affiliate) => (
+            {affiliatesForAssignment.map((affiliate) => (
               <div
                 key={affiliate.id}
                 className={cn(
                   "flex items-center justify-between p-3 border rounded-lg cursor-pointer hover:bg-muted/50",
-                  !affiliate.available && "opacity-50"
+                  ""
                 )}
               >
                 <div className="flex items-center gap-3">
                   <Avatar>
                     <AvatarFallback>
-                      {affiliate.name.split(" ").map((n) => n[0]).join("")}
+                      {`${affiliate.firstName} ${affiliate.lastName}`
+                        .trim()
+                        .split(" ")
+                        .map((n) => n[0])
+                        .join("")}
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="font-medium">{affiliate.name}</p>
-                    <div className="flex gap-1">
-                      {affiliate.expertise.map((exp) => (
-                        <Badge key={exp} variant="outline" className="text-xs">
-                          {exp}
-                        </Badge>
-                      ))}
-                    </div>
+                    <p className="font-medium">{`${affiliate.firstName} ${affiliate.lastName}`.trim()}</p>
+                    <Badge variant="outline" className="text-xs">
+                      {affiliate.expertise}
+                    </Badge>
                   </div>
                 </div>
-                <Button size="sm" disabled={!affiliate.available}>
+                <Button size="sm" onClick={() => assignAffiliateToSelectedSupplier(affiliate.id)}>
                   Assign
                 </Button>
               </div>

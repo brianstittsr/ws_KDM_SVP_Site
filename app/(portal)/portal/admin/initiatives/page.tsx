@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,39 +17,76 @@ import {
   Building2,
   Zap,
 } from "lucide-react";
-
-const initiatives = [
-  {
-    id: "tbmnc",
-    name: "TBMNC Supplier Readiness",
-    fullName: "Toyota Battery Manufacturing North Carolina",
-    description: "Supplier qualification program for Toyota's new battery manufacturing facility in Liberty, NC",
-    status: "active",
-    stats: {
-      totalSuppliers: 5,
-      approved: 1,
-      inProgress: 3,
-      affiliatesAssigned: 4,
-    },
-    icon: Battery,
-    href: "/portal/admin/initiatives/tbmnc",
-    color: "bg-red-500",
-  },
-  // Future initiatives can be added here
-  {
-    id: "future-1",
-    name: "Coming Soon",
-    fullName: "Additional OEM Programs",
-    description: "More supplier readiness programs will be added as partnerships are established",
-    status: "planned",
-    stats: null,
-    icon: Building2,
-    href: "#",
-    color: "bg-gray-400",
-  },
-];
+import { db } from "@/lib/firebase";
+import { collection, getDocs } from "firebase/firestore";
+import { COLLECTIONS, type TBMNCSupplierDoc } from "@/lib/schema";
 
 export default function InitiativesPage() {
+  const [tbmncSuppliers, setTbmncSuppliers] = useState<Array<Omit<TBMNCSupplierDoc, "id"> & { id: string }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      if (!db) {
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      try {
+        const snap = await getDocs(collection(db, COLLECTIONS.TBMNC_SUPPLIERS));
+        const rows: Array<Omit<TBMNCSupplierDoc, "id"> & { id: string }> = [];
+        snap.forEach((d) => rows.push({ id: d.id, ...(d.data() as Omit<TBMNCSupplierDoc, "id">) }));
+        setTbmncSuppliers(rows);
+      } catch (error) {
+        console.error("Error loading TBMNC initiative stats:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    load();
+  }, []);
+
+  const tbmncStats = useMemo(() => {
+    const totalSuppliers = tbmncSuppliers.length;
+    const approved = tbmncSuppliers.filter((s) => s.stage === "approved").length;
+    const inProgress = tbmncSuppliers.filter((s) => !["approved", "registration"].includes(s.stage)).length;
+    const affiliatesAssigned = new Set(
+      tbmncSuppliers.flatMap((s) => s.assignedAffiliateIds || [])
+    ).size;
+
+    return { totalSuppliers, approved, inProgress, affiliatesAssigned };
+  }, [tbmncSuppliers]);
+
+  const initiatives = useMemo(
+    () => [
+      {
+        id: "tbmnc",
+        name: "TBMNC Supplier Readiness",
+        fullName: "Toyota Battery Manufacturing North Carolina",
+        description: "Supplier qualification program for Toyota's new battery manufacturing facility in Liberty, NC",
+        status: "active" as const,
+        stats: loading ? null : tbmncStats,
+        icon: Battery,
+        href: "/portal/admin/initiatives/tbmnc",
+        color: "bg-red-500",
+      },
+      // Future initiatives can be added here
+      {
+        id: "future-1",
+        name: "Coming Soon",
+        fullName: "Additional OEM Programs",
+        description: "More supplier readiness programs will be added as partnerships are established",
+        status: "planned" as const,
+        stats: null,
+        icon: Building2,
+        href: "#",
+        color: "bg-gray-400",
+      },
+    ],
+    [loading, tbmncStats]
+  );
+
   return (
     <div className="space-y-6">
       {/* Header */}
