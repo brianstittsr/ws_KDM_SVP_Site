@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
-import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { listImages, getImage, base64ToDataUrl } from "@/lib/firebase-images";
 
@@ -13,13 +11,14 @@ interface TeamMember {
   initials: string;
   imageName: string;
   bio: string;
+  fullBio: string;
 }
 
-interface TeamMemberCardProps {
+interface TeamMemberBioProps {
   member: TeamMember;
 }
 
-export function TeamMemberCard({ member }: TeamMemberCardProps) {
+export function TeamMemberBio({ member }: TeamMemberBioProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -54,20 +53,33 @@ export function TeamMemberCard({ member }: TeamMemberCardProps) {
   }
 
   return (
-    <Link href={`/team/${member.id}`} className="block">
-      <Card className="text-center hover:shadow-lg transition-shadow cursor-pointer">
-        <CardContent className="pt-8 pb-6">
-          <Avatar className="h-24 w-24 mx-auto mb-4">
+    <div className="max-w-4xl mx-auto">
+      <div className="grid md:grid-cols-[300px_1fr] gap-8 md:gap-12">
+        {/* Photo Column */}
+        <div className="flex flex-col items-center md:items-start">
+          <Avatar className="h-64 w-64 mb-6">
             {imageUrl && <AvatarImage src={imageUrl} alt={member.name} className="object-cover" />}
-            <AvatarFallback className="bg-primary/10 text-primary text-2xl font-semibold">
+            <AvatarFallback className="bg-primary/10 text-primary text-6xl font-semibold">
               {member.initials}
             </AvatarFallback>
           </Avatar>
-          <h3 className="text-lg font-semibold">{member.name}</h3>
-          <p className="text-sm text-primary font-medium mb-3">{member.title}</p>
-          <p className="text-sm text-muted-foreground">{member.bio}</p>
-        </CardContent>
-      </Card>
-    </Link>
+          <div className="text-center md:text-left">
+            <h2 className="text-2xl font-bold mb-2">{member.name}</h2>
+            <p className="text-lg text-primary font-medium">{member.title}</p>
+          </div>
+        </div>
+
+        {/* Biography Column */}
+        <div className="prose prose-lg max-w-none">
+          <div className="text-muted-foreground space-y-4">
+            {member.fullBio.split('\n\n').map((paragraph, index) => (
+              <p key={index} className="leading-relaxed">
+                {paragraph}
+              </p>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
